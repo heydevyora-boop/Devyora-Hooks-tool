@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '../components/ui/Icon'
+import { PageContainer } from '../components/layout/PageContainer'
 import { SettingsToggleRow } from '../components/shared/SettingsToggleRow'
 import {
   notificationSettings,
@@ -22,17 +23,17 @@ export function SettingsPage() {
   )
 
   return (
-    <div className="flex flex-col w-full px-gutter-mobile space-y-space-md pb-space-lg">
+    <PageContainer narrow className="flex flex-col space-y-space-md lg:space-y-6 pb-space-lg lg:pb-12 py-space-md lg:py-8">
       <section className="flex flex-col space-y-1 pt-space-xs">
-        <span className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface tracking-tight">
+        <span className="font-headline-lg-mobile text-headline-lg-mobile lg:text-headline-lg lg:font-headline-lg text-on-surface tracking-tight">
           Settings
         </span>
-        <p className="font-body-sm text-body-sm text-on-surface-variant">
+        <p className="font-body-sm text-body-sm lg:text-body-md lg:font-body-md text-on-surface-variant">
           Workspace, notifications, brand rules &amp; connected platforms.
         </p>
       </section>
 
-      <section className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex items-center gap-3">
+      <section className="bg-surface-container-lowest rounded-xl p-space-md lg:p-6 shadow-sm flex items-center gap-3">
         <div className="w-14 h-14 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-headline-sm text-headline-sm font-semibold shrink-0">
           {workspaceInfo.name.charAt(0)}
         </div>
@@ -138,6 +139,6 @@ export function SettingsPage() {
           <span>Sign Out</span>
         </button>
       </section>
-    </div>
+    </PageContainer>
   )
 }

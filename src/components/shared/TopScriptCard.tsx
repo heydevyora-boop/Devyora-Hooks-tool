@@ -7,7 +7,7 @@ interface TopScriptCardProps {
 
 export function TopScriptCard({ script }: TopScriptCardProps) {
   return (
-    <div className="min-w-[280px] max-w-[280px] bg-surface-container-lowest rounded-xl p-4 shadow-sm snap-start flex flex-col justify-between space-y-3">
+    <div className="min-w-[280px] max-w-[280px] lg:min-w-0 lg:max-w-none lg:w-full bg-surface-container-lowest rounded-xl p-4 lg:p-5 shadow-sm snap-start flex flex-col justify-between space-y-3 lg:hover:shadow-md transition-shadow">
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span

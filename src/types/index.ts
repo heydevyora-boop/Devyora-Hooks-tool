@@ -1,6 +1,7 @@
 export interface NavItem {
   path: string
   label: string
+  sidebarLabel?: string
   icon: string
   isPrimaryAction?: boolean
 }
