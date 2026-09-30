@@ -221,3 +221,115 @@ export interface ContentHistoryItem {
   engagement?: string
   status: ContentHistoryStatus
 }
+
+// ---------------------------------------------------------------------------
+// Inspiration, Instagram Grid, Knowledge Base approvals,
+// Content Strategy, Content Flowchart
+// ---------------------------------------------------------------------------
+
+export interface InspirationPattern {
+  hookPattern: string
+  topic: string
+  format: string
+  narrativeStructure: string
+  visualPattern: string
+  ctaPattern: string
+  contentAngle: string
+}
+
+export interface InspirationItem {
+  id: string
+  source: ContentSourceItem
+  pattern: InspirationPattern
+  notes?: string
+  savedAt: string
+}
+
+export type GridSlotContentType = 'reel' | 'carousel' | 'static' | 'story' | 'empty'
+
+export interface GridSlotDefinition {
+  id: string
+  position: number
+  contentType: GridSlotContentType
+  productRef?: string
+  label?: string
+}
+
+export interface GridTemplate {
+  id: string
+  name: string
+  description?: string
+  slots: GridSlotDefinition[]
+  isPreset: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type ApprovalTargetType = 'product' | 'grid_template' | 'inspiration'
+
+export interface PendingApproval {
+  id: string
+  targetType: ApprovalTargetType
+  targetId: string
+  targetLabel: string
+  requestedAt: string
+}
+
+export interface ContentStrategyInput {
+  goal: string
+  durationWeeks: number
+  postingFrequency: string
+  productIds: string[]
+  objective: string
+}
+
+export interface StrategyContentSlot {
+  id: string
+  weekLabel: string
+  product: string
+  contentType: GridSlotContentType
+  reason: string
+}
+
+export interface ContentStrategyPlan {
+  id: string
+  input: ContentStrategyInput
+  contentGaps: string[]
+  opportunities: string[]
+  sequence: StrategyContentSlot[]
+  generatedAt: string
+}
+
+export type FlowNodeType = 'start' | 'analysis' | 'gap' | 'content' | 'decision' | 'end'
+export type FlowNodeStatus = 'pending' | 'in_progress' | 'done' | 'blocked'
+export type FlowNodePriority = 'low' | 'medium' | 'high'
+
+export interface FlowchartNode {
+  id: string
+  type: FlowNodeType
+  label: string
+  product?: string
+  date?: string
+  contentType?: string
+  goal?: string
+  status: FlowNodeStatus
+  priority?: FlowNodePriority
+  reason?: string
+  gridPosition?: number
+  branch?: 'yes' | 'no'
+}
+
+export interface FlowchartEdge {
+  from: string
+  to: string
+  label?: string
+}
+
+export interface ContentFlowchart {
+  id: string
+  strategyId: string
+  nodes: FlowchartNode[]
+  edges: FlowchartEdge[]
+  generatedAt: string
+  approvedAt?: string
+}

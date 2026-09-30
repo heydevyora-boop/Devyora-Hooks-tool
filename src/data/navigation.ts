@@ -11,6 +11,7 @@ export const navItems: NavItem[] = [
   },
   { path: '/library', label: 'Library', icon: 'folder' },
   { path: '/hub', label: 'Hub', sidebarLabel: 'Content Hub', icon: 'inventory_2' },
+  { path: '/plan', label: 'Plan', sidebarLabel: 'Plan', icon: 'account_tree' },
   { path: '/intelligence', label: 'Intel', sidebarLabel: 'Intelligence', icon: 'psychology' },
   { path: '/settings', label: 'Settings', icon: 'tune' },
 ]

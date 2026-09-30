@@ -9,6 +9,7 @@ const PAGE_LABELS: Record<string, string> = {
   '/create': 'Create Script',
   '/library': 'Library',
   '/hub': 'Content Hub',
+  '/plan': 'Plan',
   '/intelligence': 'Intelligence Hub',
   '/settings': 'Settings',
 }

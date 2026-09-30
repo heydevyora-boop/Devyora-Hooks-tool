@@ -5,15 +5,65 @@ import { KnowledgeModuleCard } from '../components/shared/KnowledgeModuleCard'
 import { MicroModuleCard } from '../components/shared/MicroModuleCard'
 import { RulebookCard } from '../components/shared/RulebookCard'
 import { RetentionCurveChart } from '../components/shared/RetentionCurveChart'
+import { KnowledgeSourceTile } from '../components/shared/knowledge/KnowledgeSourceTile'
+import { PendingApprovalsPanel } from '../components/shared/knowledge/PendingApprovalsPanel'
+import { usePersistentState } from '../hooks/usePersistentState'
+import { seedProducts, seedContentHistory } from '../data/mockKnowledge'
+import { presetGridTemplates } from '../data/mockGrid'
 import {
   intelligenceCategories,
   knowledgeModules,
   microModules,
   rulebookEntries,
 } from '../data/mockIntelligence'
+import type {
+  ProductKnowledge,
+  ContentHistoryItem,
+  InspirationItem,
+  GridTemplate,
+  PendingApproval,
+} from '../types'
 
 export function IntelligencePage() {
   const [activeCategory, setActiveCategory] = useState('knowledge-base')
+
+  // Read the same persisted keys Content Hub writes to, so this vault
+  // reflects real counts instead of a second, divergent copy of the data.
+  const [products, setProducts] = usePersistentState<ProductKnowledge[]>(
+    'devyora-products',
+    seedProducts,
+  )
+  const [history] = usePersistentState<ContentHistoryItem[]>(
+    'devyora-content-history',
+    seedContentHistory,
+  )
+  const [inspirationItems, setInspirationItems] = usePersistentState<InspirationItem[]>(
+    'devyora-inspiration-items',
+    [],
+  )
+  const [gridTemplates, setGridTemplates] = usePersistentState<GridTemplate[]>(
+    'devyora-grid-templates',
+    presetGridTemplates,
+  )
+  const [pendingApprovals, setPendingApprovals] = usePersistentState<PendingApproval[]>(
+    'devyora-pending-approvals',
+    [],
+  )
+
+  const handleApprove = (approval: PendingApproval) => {
+    if (approval.targetType === 'product') {
+      setProducts((prev) => prev.filter((item) => item.id !== approval.targetId))
+    } else if (approval.targetType === 'grid_template') {
+      setGridTemplates((prev) => prev.filter((item) => item.id !== approval.targetId))
+    } else if (approval.targetType === 'inspiration') {
+      setInspirationItems((prev) => prev.filter((item) => item.id !== approval.targetId))
+    }
+    setPendingApprovals((prev) => prev.filter((item) => item.id !== approval.id))
+  }
+
+  const handleReject = (approval: PendingApproval) => {
+    setPendingApprovals((prev) => prev.filter((item) => item.id !== approval.id))
+  }
 
   return (
     <PageContainer className="flex flex-col py-space-md lg:py-8">
@@ -72,6 +122,40 @@ export function IntelligencePage() {
               9 Modules Active
             </span>
           </div>
+
+          <PendingApprovalsPanel
+            approvals={pendingApprovals}
+            onApprove={handleApprove}
+            onReject={handleReject}
+          />
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <KnowledgeSourceTile
+              icon="inventory_2"
+              label="Products"
+              count={products.length}
+              to="/hub?tab=products"
+            />
+            <KnowledgeSourceTile
+              icon="history"
+              label="Content History"
+              count={history.length}
+              to="/hub?tab=history"
+            />
+            <KnowledgeSourceTile
+              icon="grid_view"
+              label="Grid Structures"
+              count={gridTemplates.length}
+              to="/hub?tab=grid"
+            />
+            <KnowledgeSourceTile
+              icon="auto_awesome"
+              label="Inspiration Patterns"
+              count={inspirationItems.length}
+              to="/hub?tab=inspiration"
+            />
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 lg:gap-3.5">
             {knowledgeModules.slice(0, 5).map((module) => (
               <KnowledgeModuleCard key={module.id} module={module} />

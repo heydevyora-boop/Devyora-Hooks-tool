@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Icon } from '../components/ui/Icon'
 import { PageContainer } from '../components/layout/PageContainer'
 import { ProductCard } from '../components/shared/knowledge/ProductCard'
@@ -7,11 +8,21 @@ import { InstagramConnectionCard } from '../components/shared/knowledge/Instagra
 import { SourceImportPanel } from '../components/shared/knowledge/SourceImportPanel'
 import { ContentHistoryCard } from '../components/shared/knowledge/ContentHistoryCard'
 import { ContentTimeline } from '../components/shared/knowledge/ContentTimeline'
+import { InspirationTab } from '../components/shared/knowledge/InspirationTab'
+import { GridPlanningTab } from '../components/shared/grid/GridPlanningTab'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { seedProducts, initialInstagramConnection, seedContentHistory } from '../data/mockKnowledge'
-import type { ProductKnowledge, ContentSourceItem } from '../types'
+import { presetGridTemplates } from '../data/mockGrid'
+import type {
+  ProductKnowledge,
+  ContentSourceItem,
+  InspirationItem,
+  GridTemplate,
+  PendingApproval,
+  ApprovalTargetType,
+} from '../types'
 
-type HubTab = 'products' | 'instagram' | 'import' | 'history' | 'timeline'
+type HubTab = 'products' | 'instagram' | 'import' | 'history' | 'timeline' | 'inspiration' | 'grid'
 
 const TABS: { id: HubTab; label: string; icon: string }[] = [
   { id: 'products', label: 'Products', icon: 'inventory_2' },
@@ -19,10 +30,23 @@ const TABS: { id: HubTab; label: string; icon: string }[] = [
   { id: 'import', label: 'Import', icon: 'upload_file' },
   { id: 'history', label: 'History', icon: 'history' },
   { id: 'timeline', label: 'Timeline', icon: 'timeline' },
+  { id: 'inspiration', label: 'Inspiration', icon: 'auto_awesome' },
+  { id: 'grid', label: 'Grid', icon: 'grid_view' },
 ]
 
+const TAB_IDS = TABS.map((tab) => tab.id)
+
 export function ContentHubPage() {
-  const [activeTab, setActiveTab] = useState<HubTab>('products')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialTab = TAB_IDS.includes(searchParams.get('tab') as HubTab)
+    ? (searchParams.get('tab') as HubTab)
+    : 'products'
+  const [activeTab, setActiveTab] = useState<HubTab>(initialTab)
+
+  const changeTab = (tab: HubTab) => {
+    setActiveTab(tab)
+    setSearchParams(tab === 'products' ? {} : { tab })
+  }
 
   const [products, setProducts] = usePersistentState<ProductKnowledge[]>(
     'devyora-products',
@@ -37,6 +61,22 @@ export function ContentHubPage() {
     [],
   )
   const [history] = usePersistentState('devyora-content-history', seedContentHistory)
+  const [inspirationItems, setInspirationItems] = usePersistentState<InspirationItem[]>(
+    'devyora-inspiration-items',
+    [],
+  )
+  const [gridTemplates, setGridTemplates] = usePersistentState<GridTemplate[]>(
+    'devyora-grid-templates',
+    presetGridTemplates,
+  )
+  const [activeGridId, setActiveGridId] = usePersistentState<string | null>(
+    'devyora-active-grid-id',
+    null,
+  )
+  const [pendingApprovals, setPendingApprovals] = usePersistentState<PendingApproval[]>(
+    'devyora-pending-approvals',
+    [],
+  )
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null)
   const [isAddingProduct, setIsAddingProduct] = useState(false)
@@ -50,6 +90,30 @@ export function ContentHubPage() {
     })
     setEditingProductId(null)
     setIsAddingProduct(false)
+  }
+
+  const isPendingDeletion = (targetId: string) =>
+    pendingApprovals.some((approval) => approval.targetId === targetId)
+
+  /**
+   * Deletion of permanent knowledge (products, grid templates, inspiration
+   * patterns) is never immediate — it queues a PendingApproval that only the
+   * Knowledge Base's admin-approval panel (on the Intelligence page) can
+   * resolve, per the requirement that important knowledge removal requires
+   * admin approval.
+   */
+  const requestDelete = (targetType: ApprovalTargetType, targetId: string, targetLabel: string) => {
+    if (isPendingDeletion(targetId)) return
+    setPendingApprovals((prev) => [
+      ...prev,
+      {
+        id: `approval-${Date.now()}`,
+        targetType,
+        targetId,
+        targetLabel,
+        requestedAt: new Date().toISOString(),
+      },
+    ])
   }
 
   return (
@@ -69,7 +133,7 @@ export function ContentHubPage() {
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => changeTab(tab.id)}
               className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md flex items-center gap-1.5 transition-colors ${
                 activeTab === tab.id
                   ? 'bg-primary-container text-on-primary shadow-sm'
@@ -110,12 +174,24 @@ export function ContentHubPage() {
                     onSave={handleSaveProduct}
                     onCancel={() => setEditingProductId(null)}
                   />
+                ) : isPendingDeletion(product.id) ? (
+                  <div
+                    key={product.id}
+                    className="rounded-xl bg-surface-container-low p-3.5 flex items-center justify-between"
+                  >
+                    <span className="font-body-sm text-body-sm text-on-surface-variant truncate">
+                      {product.name}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-[11px] font-semibold">
+                      Pending admin approval
+                    </span>
+                  </div>
                 ) : (
                   <ProductCard
                     key={product.id}
                     product={product}
                     onEdit={() => setEditingProductId(product.id)}
-                    onDelete={() => setProducts((prev) => prev.filter((p) => p.id !== product.id))}
+                    onDelete={() => requestDelete('product', product.id, product.name)}
                   />
                 ),
               )}
@@ -148,6 +224,27 @@ export function ContentHubPage() {
         )}
 
         {activeTab === 'timeline' && <ContentTimeline items={history} />}
+
+        {activeTab === 'inspiration' && (
+          <InspirationTab
+            items={inspirationItems}
+            onChange={setInspirationItems}
+            onRequestDelete={(id, label) => requestDelete('inspiration', id, label)}
+            isPendingDeletion={isPendingDeletion}
+          />
+        )}
+
+        {activeTab === 'grid' && (
+          <GridPlanningTab
+            templates={gridTemplates}
+            onChange={setGridTemplates}
+            activeGridId={activeGridId}
+            onSetActiveGridId={setActiveGridId}
+            products={products}
+            onRequestDelete={(id, label) => requestDelete('grid_template', id, label)}
+            isPendingDeletion={isPendingDeletion}
+          />
+        )}
       </div>
     </PageContainer>
   )
