@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Icon } from '../components/ui/Icon'
 import { Toggle } from '../components/ui/Toggle'
+import { Tooltip } from '../components/ui/Tooltip'
 import { PageContainer } from '../components/layout/PageContainer'
 import { ScoreCard } from '../components/shared/ScoreCard'
 import { HookVariationCard } from '../components/shared/HookVariationCard'
 import { SceneCard } from '../components/shared/SceneCard'
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard'
+import { usePersistentState } from '../hooks/usePersistentState'
 import {
   platforms,
   scriptPresets,
@@ -15,6 +17,8 @@ import {
   directorScenes,
   captionPackage,
 } from '../data/mockCreateScript'
+import { defaultViralitySettings } from '../data/mockSettings'
+import type { ViralitySettings } from '../types'
 
 export function CreateScriptPage() {
   const [selectedPlatform, setSelectedPlatform] = useState('reels')
@@ -22,6 +26,11 @@ export function CreateScriptPage() {
   const [integrations, setIntegrations] = useState(() =>
     Object.fromEntries(brainIntegrations.map((item) => [item.id, item.enabled])),
   )
+  const [viralitySettings] = usePersistentState<ViralitySettings>(
+    'devyora-virality-settings',
+    defaultViralitySettings,
+  )
+  const viralityThresholdLabel = `${viralitySettings.metricLabel} ≥ ${viralitySettings.threshold.toLocaleString()}`
   const { copied, copy } = useCopyToClipboard()
 
   return (
@@ -344,35 +353,43 @@ export function CreateScriptPage() {
 
           <ScoreCard
             score={94}
-            tierLabel="Viral & High Authority Tier"
+            tierLabel="High Authority Tier"
             tierBadge="Tier 1 Elite"
             diagnosis="High retention velocity. Sharp contrarian pattern interrupt at 0:02 with zero generic AI phrasing."
             metrics={scorecardMetrics}
+            viralityThresholdLabel={viralityThresholdLabel}
           />
 
           <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
-              <span className="font-title text-title text-on-surface flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5">
                 <Icon name="analytics" className="text-secondary text-[20px]" />
-                Pre-Publish Retention Forecast
-              </span>
+                <span className="font-title text-title text-on-surface">
+                  Pre-Publish Retention Forecast
+                </span>
+                <Tooltip text="Estimated ability of the content to keep viewers watching, before you publish it." />
+              </div>
               <span className="font-code text-label-sm text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-semibold">
-                +34% vs Avg
+                34% above benchmark
               </span>
             </div>
             <div className="flex items-center gap-3 bg-surface-container-low p-3 rounded-lg">
               <div className="flex flex-col">
                 <span className="font-label-sm text-label-sm text-on-surface-variant">
-                  Expected 3s Retention
+                  Predicted retention
                 </span>
-                <div className="flex items-baseline gap-1">
-                  <span className="font-display-mobile text-display-mobile text-primary leading-none">
-                    78%
-                  </span>
-                  <span className="font-body-sm text-body-sm text-on-surface-variant">
-                    / benchmark 44%
-                  </span>
-                </div>
+                <span className="font-display-mobile text-display-mobile text-primary leading-none">
+                  78%
+                </span>
+              </div>
+              <div className="w-px self-stretch bg-outline-variant/40" />
+              <div className="flex flex-col">
+                <span className="font-label-sm text-label-sm text-on-surface-variant">
+                  Benchmark
+                </span>
+                <span className="font-headline-sm text-headline-sm text-on-surface-variant leading-none">
+                  44%
+                </span>
               </div>
             </div>
             <div className="bg-surface-container-high/60 rounded-lg p-2.5 flex items-start gap-2">
@@ -392,7 +409,8 @@ export function CreateScriptPage() {
             <div className="flex items-center justify-between">
               <h3 className="font-title text-title text-on-surface flex items-center gap-1.5">
                 <Icon name="flare" className="text-tertiary-container text-[20px]" />
-                A/B Hook Variations (3 Formatted)
+                Hook Variations (3 options)
+                <Tooltip text="Different hook options for the same content — pick whichever opening line works best." />
               </h3>
               <span className="font-label-sm text-label-sm text-on-surface-variant">
                 Tap to swap
@@ -457,7 +475,7 @@ export function CreateScriptPage() {
               className="py-2.5 px-3 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md font-semibold flex items-center justify-center gap-1.5 shadow-sm"
             >
               <Icon name="refresh" className="text-[18px] text-tertiary-container" />
-              <span>Regenerate (A/B)</span>
+              <span>Regenerate Hooks</span>
             </button>
           </div>
         </section>

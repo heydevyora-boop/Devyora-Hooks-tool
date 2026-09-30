@@ -379,3 +379,19 @@ export interface GeneratedContentItem {
   generatedAt: string
   regenerationHistory: RegenerationFeedback[]
 }
+
+// ---------------------------------------------------------------------------
+// Final UI polish: configurable "viral" definition, admin settings
+// ---------------------------------------------------------------------------
+
+/**
+ * What counts as "viral" for this workspace. Configurable from Admin
+ * Settings rather than hardcoded, so Virality Potential scores can be tied
+ * to a real, team-defined outcome instead of an arbitrary number.
+ */
+export interface ViralitySettings {
+  /** e.g. "Organic Views" */
+  metricLabel: string
+  /** e.g. 50000 — the metric value that counts as "viral" */
+  threshold: number
+}

@@ -1,13 +1,17 @@
 import { useState } from 'react'
 import { Icon } from '../components/ui/Icon'
+import { Tooltip } from '../components/ui/Tooltip'
 import { PageContainer } from '../components/layout/PageContainer'
 import { SettingsToggleRow } from '../components/shared/SettingsToggleRow'
+import { usePersistentState } from '../hooks/usePersistentState'
 import {
   notificationSettings,
   brandRuleSettings,
   integrationSettings,
   workspaceInfo,
+  defaultViralitySettings,
 } from '../data/mockSettings'
+import type { ViralitySettings } from '../types'
 
 /**
  * The Stitch export did not include a Settings screen (only the bottom-nav
@@ -20,6 +24,10 @@ export function SettingsPage() {
   )
   const [brandRules, setBrandRules] = useState(() =>
     Object.fromEntries(brandRuleSettings.map((item) => [item.id, item.enabled])),
+  )
+  const [viralitySettings, setViralitySettings] = usePersistentState<ViralitySettings>(
+    'devyora-virality-settings',
+    defaultViralitySettings,
   )
 
   return (
@@ -90,6 +98,46 @@ export function SettingsPage() {
               disabled={item.id === 'hinglish'}
             />
           ))}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-space-sm">
+        <div className="flex items-center gap-space-xs">
+          <Icon name="admin_panel_settings" className="text-[18px] text-primary" />
+          <h2 className="font-title text-title text-on-surface">Admin</h2>
+        </div>
+        <div className="bg-surface-container-low rounded-xl p-3.5 flex flex-col gap-2.5">
+          <div className="flex items-center gap-1.5">
+            <span className="font-label-md text-label-md text-on-surface font-semibold">
+              Virality Threshold
+            </span>
+            <Tooltip text="Defines what counts as 'viral' for your team. Every Virality Potential score in the app is measured against this — it's an estimate, not a guarantee of future views." />
+          </div>
+          <p className="font-body-sm text-body-sm text-on-surface-variant">
+            Content is considered viral once it reaches this many organic views.
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="font-body-sm text-body-sm text-on-surface-variant shrink-0">
+              {viralitySettings.metricLabel} ≥
+            </span>
+            <input
+              type="number"
+              min={0}
+              step={1000}
+              value={viralitySettings.threshold}
+              onChange={(event) =>
+                setViralitySettings((prev) => ({
+                  ...prev,
+                  threshold: Math.max(0, Number(event.target.value) || 0),
+                }))
+              }
+              className="w-full bg-surface-container-lowest rounded-lg p-2 font-code text-label-md text-on-surface outline-none"
+            />
+          </div>
+          <p className="font-label-sm text-[11px] text-on-surface-variant">
+            No live analytics backend is connected yet — this only sets the threshold used to
+            label future scores once real performance data is wired up.
+          </p>
         </div>
       </section>
 

@@ -95,7 +95,7 @@ export const topHooksTelemetry = [
     text: '"The 3-second code review trick senior architects never share"',
     usedIn: 14,
     avgHold: '82% avg hold',
-    extra: 'Tier 1 Viral',
+    extra: 'Top Performer',
     extraColorClass: 'text-primary',
   },
 ]

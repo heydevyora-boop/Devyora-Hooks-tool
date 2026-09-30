@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Icon } from '../components/ui/Icon'
 import { VoiceInputButton } from '../components/ui/VoiceInputButton'
+import { Tooltip } from '../components/ui/Tooltip'
 import { PageContainer } from '../components/layout/PageContainer'
 import { HookVariationCard } from '../components/shared/HookVariationCard'
 import { SceneCard } from '../components/shared/SceneCard'
@@ -205,6 +206,7 @@ export function ScriptGenerationPage() {
               <h2 className="font-title text-title lg:text-headline-sm lg:font-headline-sm text-on-surface flex items-center gap-1.5">
                 <Icon name="flare" className="text-tertiary-container text-[20px]" />
                 Hooks
+                <Tooltip text="Different hook options for the same content — pick whichever opening line works best." />
               </h2>
               <RegenerateControl targetLabel="Hook #1" onRegenerate={handleRegenerate('Hook #1')} />
             </div>
@@ -292,12 +294,36 @@ export function ScriptGenerationPage() {
 
           <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-3">
             {item.status === 'saved' || justSaved ? (
-              <div className="flex items-center gap-2 text-emerald-700">
-                <Icon name="verified" className="text-[20px]" />
-                <div className="flex flex-col">
+              <div className="flex flex-col gap-2.5">
+                <div className="flex items-center gap-2 text-emerald-700">
+                  <Icon name="verified" className="text-[20px]" />
                   <span className="font-title text-title">Saved to Content Intelligence</span>
-                  <Link to="/hub?tab=history" className="font-label-sm text-label-sm underline">
-                    View it in Content Hub → History
+                </div>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  This content is now part of your historical intelligence — future strategies and
+                  scripts will take it into account.
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Link
+                    to="/hub?tab=history"
+                    className="px-3 py-2 rounded-lg bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1.5"
+                  >
+                    <Icon name="history" className="text-[16px]" />
+                    View in Content Hub
+                  </Link>
+                  <Link
+                    to="/plan?tab=flowchart"
+                    className="px-3 py-2 rounded-lg bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1.5"
+                  >
+                    <Icon name="account_tree" className="text-[16px]" />
+                    Create Next Content
+                  </Link>
+                  <Link
+                    to="/"
+                    className="px-3 py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold flex items-center gap-1.5"
+                  >
+                    <Icon name="home" className="text-[16px]" />
+                    Back to Home
                   </Link>
                 </div>
               </div>

@@ -4,9 +4,31 @@ import { PageContainer } from '../components/layout/PageContainer'
 import { StatCard } from '../components/shared/StatCard'
 import { TopScriptCard } from '../components/shared/TopScriptCard'
 import { RecentScriptRow } from '../components/shared/RecentScriptRow'
+import { HomeIntelCard } from '../components/shared/HomeIntelCard'
 import { statCards, topScripts, recentScripts } from '../data/mockHome'
+import { usePersistentState } from '../hooks/usePersistentState'
+import { seedProducts, initialInstagramConnection } from '../data/mockKnowledge'
+import type { ProductKnowledge, InstagramConnection, ContentStrategyPlan, ContentFlowchart } from '../types'
 
 export function HomePage() {
+  // Reads the same persisted state the Content Hub / Plan pages write to —
+  // this section reflects real planning progress, never a second mock copy.
+  const [products] = usePersistentState<ProductKnowledge[]>('devyora-products', seedProducts)
+  const [instagramConnection] = usePersistentState<InstagramConnection>(
+    'devyora-instagram-connection',
+    initialInstagramConnection,
+  )
+  const [strategyPlan] = usePersistentState<ContentStrategyPlan | null>(
+    'devyora-content-strategy',
+    null,
+  )
+  const [flowchart] = usePersistentState<ContentFlowchart | null>('devyora-content-flowchart', null)
+
+  const contentNodes = flowchart?.nodes.filter((node) => node.type === 'content') ?? []
+  const doneContentNodes = contentNodes.filter((node) => node.status === 'done')
+  const contentGaps = strategyPlan?.contentGaps ?? []
+  const opportunities = strategyPlan?.opportunities ?? []
+
   return (
     <PageContainer className="flex flex-col space-y-space-md lg:space-y-8 py-space-md lg:py-8">
       <section className="flex flex-col space-y-1">
@@ -84,10 +106,82 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 lg:gap-4">
-        {statCards.map((stat) => (
-          <StatCard key={stat.id} {...stat} />
-        ))}
+      <section className="flex flex-col space-y-2.5 lg:space-y-4">
+        <div className="flex items-center space-x-2">
+          <Icon name="hub" className="text-[18px] text-primary" />
+          <h2 className="font-title text-title lg:text-headline-sm lg:font-headline-sm text-on-surface">
+            Content Intelligence
+          </h2>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 lg:gap-4">
+          <HomeIntelCard
+            icon="photo_camera"
+            label="Instagram"
+            value={
+              instagramConnection.status === 'connected'
+                ? (instagramConnection.handle ?? 'Connected')
+                : 'Not connected'
+            }
+            detail={
+              instagramConnection.status === 'connected'
+                ? `${instagramConnection.followers?.toLocaleString() ?? '—'} followers`
+                : 'Connect to see analytics'
+            }
+            tone={instagramConnection.status === 'connected' ? 'positive' : 'muted'}
+            to="/hub?tab=instagram"
+          />
+          <HomeIntelCard
+            icon="account_tree"
+            label="Content Flow"
+            value={flowchart ? `${doneContentNodes.length}/${contentNodes.length} done` : 'No plan yet'}
+            detail={
+              flowchart
+                ? flowchart.approvedAt
+                  ? 'Plan approved'
+                  : 'Awaiting approval'
+                : 'Build a content strategy first'
+            }
+            tone={flowchart?.approvedAt ? 'positive' : flowchart ? 'attention' : 'muted'}
+            to={flowchart ? '/plan?tab=flowchart' : '/plan'}
+          />
+          <HomeIntelCard
+            icon="troubleshoot"
+            label="Content Gaps"
+            value={contentGaps.length > 0 ? `${contentGaps.length} identified` : '—'}
+            detail={contentGaps[0] ?? 'Build a strategy to see gaps'}
+            tone={contentGaps.length > 0 ? 'attention' : 'muted'}
+            to="/plan"
+          />
+          <HomeIntelCard
+            icon="lightbulb"
+            label="New Opportunities"
+            value={opportunities.length > 0 ? `${opportunities.length} found` : '—'}
+            detail={opportunities[0] ?? 'Build a strategy to see opportunities'}
+            tone={opportunities.length > 0 ? 'positive' : 'muted'}
+            to="/plan"
+          />
+          <HomeIntelCard
+            icon="inventory_2"
+            label="Product Intelligence"
+            value={String(products.length)}
+            detail={products.length === 1 ? 'product tracked' : 'products tracked'}
+            to="/hub?tab=products"
+          />
+        </div>
+      </section>
+
+      <section className="flex flex-col space-y-2.5 lg:space-y-4">
+        <div className="flex items-center space-x-2">
+          <Icon name="query_stats" className="text-[18px] text-on-surface-variant" />
+          <h2 className="font-title text-title lg:text-headline-sm lg:font-headline-sm text-on-surface">
+            Script Performance
+          </h2>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 lg:gap-4">
+          {statCards.map((stat) => (
+            <StatCard key={stat.id} {...stat} />
+          ))}
+        </div>
       </section>
 
       <section className="bg-surface-container-low rounded-xl p-3.5 lg:p-5 shadow-sm relative overflow-hidden">

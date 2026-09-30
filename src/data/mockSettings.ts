@@ -1,3 +1,5 @@
+import type { ViralitySettings } from '../types'
+
 export const notificationSettings = [
   {
     id: 'weekly-digest',
@@ -46,4 +48,14 @@ export const workspaceInfo = {
   role: 'Founder / Growth Lead',
   plan: 'Script Intel Pro',
   seats: '3 of 5 seats used',
+}
+
+/**
+ * Default definition of "viral" until an admin changes it. Drives every
+ * Virality Potential label app-wide — never hardcoded into the components
+ * that display it.
+ */
+export const defaultViralitySettings: ViralitySettings = {
+  metricLabel: 'Organic Views',
+  threshold: 50000,
 }
