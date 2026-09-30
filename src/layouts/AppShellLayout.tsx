@@ -16,7 +16,9 @@ const PAGE_LABELS: Record<string, string> = {
 
 export function AppShellLayout() {
   const location = useLocation()
-  const pageLabel = PAGE_LABELS[location.pathname] ?? 'Devyora Hooks'
+  const pageLabel = location.pathname.startsWith('/script/')
+    ? 'Script Generation'
+    : (PAGE_LABELS[location.pathname] ?? 'Devyora Hooks')
   const [sidebarCollapsed, setSidebarCollapsed] = usePersistentState(
     'devyora-sidebar-collapsed',
     false,

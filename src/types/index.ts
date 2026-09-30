@@ -333,3 +333,49 @@ export interface ContentFlowchart {
   generatedAt: string
   approvedAt?: string
 }
+
+// ---------------------------------------------------------------------------
+// Script Generation, Visual Direction, B-Roll, Regeneration
+// (built from an approved ContentFlowchart node; reuses HookVariation,
+// DirectorScene, and ContentHistoryItem as-is — no parallel types)
+// ---------------------------------------------------------------------------
+
+export interface VisualDirectionBeat {
+  sceneNumber: number
+  /** WHAT to show — never camera settings (lens, angle, exposure, etc.) */
+  description: string
+}
+
+export interface BRollShot {
+  sceneNumber: number
+  description: string
+}
+
+export interface RegenerationFeedback {
+  id: string
+  targetLabel: string
+  feedback: string
+  submittedAt: string
+}
+
+export type GeneratedContentStatus = 'draft' | 'approved' | 'saved'
+
+export interface GeneratedContentItem {
+  id: string
+  flowchartNodeId: string
+  strategyId: string
+  topic: string
+  product: string
+  gridPosition?: number
+  date: string
+  hooks: HookVariation[]
+  scenes: DirectorScene[]
+  visualDirection: VisualDirectionBeat[]
+  brollPlan: BRollShot[]
+  onScreenText: string[]
+  cta: string
+  caption: string
+  status: GeneratedContentStatus
+  generatedAt: string
+  regenerationHistory: RegenerationFeedback[]
+}

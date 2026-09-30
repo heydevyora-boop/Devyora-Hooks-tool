@@ -19,6 +19,7 @@ import type {
   ContentStrategyInput,
   ContentStrategyPlan,
   ContentFlowchart as ContentFlowchartType,
+  GeneratedContentItem,
 } from '../types'
 
 type PlanTab = 'strategy' | 'flowchart'
@@ -57,6 +58,8 @@ export function PlanPage() {
     'devyora-content-flowchart',
     null,
   )
+  const [generatedItems] = usePersistentState<GeneratedContentItem[]>('devyora-generated-content', [])
+  const generatedNodeIds = new Set(generatedItems.map((item) => item.flowchartNodeId))
   const [isGenerating, setIsGenerating] = useState(false)
   const [isBuildingFlow, setIsBuildingFlow] = useState(false)
 
@@ -208,6 +211,7 @@ export function PlanPage() {
               onApprovePlan={() =>
                 setFlowchart({ ...flowchart, approvedAt: new Date().toISOString() })
               }
+              generatedNodeIds={generatedNodeIds}
             />
           ))}
       </div>

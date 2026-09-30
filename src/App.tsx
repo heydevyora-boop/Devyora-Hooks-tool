@@ -5,6 +5,7 @@ import { CreateScriptPage } from './pages/CreateScriptPage'
 import { LibraryPage } from './pages/LibraryPage'
 import { ContentHubPage } from './pages/ContentHubPage'
 import { PlanPage } from './pages/PlanPage'
+import { ScriptGenerationPage } from './pages/ScriptGenerationPage'
 import { IntelligencePage } from './pages/IntelligencePage'
 import { SettingsPage } from './pages/SettingsPage'
 
@@ -18,6 +19,7 @@ function App() {
           <Route path="library" element={<LibraryPage />} />
           <Route path="hub" element={<ContentHubPage />} />
           <Route path="plan" element={<PlanPage />} />
+          <Route path="script/:nodeId" element={<ScriptGenerationPage />} />
           <Route path="intelligence" element={<IntelligencePage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

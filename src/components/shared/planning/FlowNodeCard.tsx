@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Icon } from '../../ui/Icon'
 import { SLOT_TYPE_ICON } from '../grid/gridMeta'
 import type { FlowchartNode, GridSlotContentType } from '../../../types'
@@ -35,6 +36,10 @@ interface FlowNodeCardProps {
   onApprove?: () => void
   onMoveUp?: () => void
   onMoveDown?: () => void
+  /** Only passed once the whole plan is approved — enforces that script
+   * generation can't be reached before Approval. */
+  scriptHref?: string
+  hasGeneratedScript?: boolean
 }
 
 export function FlowNodeCard({
@@ -45,6 +50,8 @@ export function FlowNodeCard({
   onApprove,
   onMoveUp,
   onMoveDown,
+  scriptHref,
+  hasGeneratedScript,
 }: FlowNodeCardProps) {
   const icon =
     node.type === 'content' && node.contentType
@@ -122,6 +129,15 @@ export function FlowNodeCard({
             </p>
           )}
           <div className="flex items-center gap-1.5 flex-wrap">
+            {scriptHref && (
+              <Link
+                to={scriptHref}
+                className="px-2.5 py-1.5 rounded-lg bg-tertiary-container text-on-tertiary font-label-sm text-label-sm font-semibold flex items-center gap-1"
+              >
+                <Icon name={hasGeneratedScript ? 'visibility' : 'movie'} className="text-[14px]" />
+                {hasGeneratedScript ? 'View Script' : 'Generate Script'}
+              </Link>
+            )}
             {onApprove && node.status !== 'done' && (
               <button
                 type="button"
