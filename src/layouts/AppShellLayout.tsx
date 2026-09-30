@@ -8,6 +8,7 @@ const PAGE_LABELS: Record<string, string> = {
   '/': 'Home',
   '/create': 'Create Script',
   '/library': 'Library',
+  '/hub': 'Content Hub',
   '/intelligence': 'Intelligence Hub',
   '/settings': 'Settings',
 }

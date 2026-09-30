@@ -3,6 +3,7 @@ import { AppShellLayout } from './layouts/AppShellLayout'
 import { HomePage } from './pages/HomePage'
 import { CreateScriptPage } from './pages/CreateScriptPage'
 import { LibraryPage } from './pages/LibraryPage'
+import { ContentHubPage } from './pages/ContentHubPage'
 import { IntelligencePage } from './pages/IntelligencePage'
 import { SettingsPage } from './pages/SettingsPage'
 
@@ -14,6 +15,7 @@ function App() {
           <Route index element={<HomePage />} />
           <Route path="create" element={<CreateScriptPage />} />
           <Route path="library" element={<LibraryPage />} />
+          <Route path="hub" element={<ContentHubPage />} />
           <Route path="intelligence" element={<IntelligencePage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

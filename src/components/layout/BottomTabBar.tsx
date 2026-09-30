@@ -5,7 +5,10 @@ import { navItems } from '../../data/navigation'
 export function BottomTabBar() {
   return (
     <nav className="lg:hidden fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
-      <div className="h-16 px-space-xs grid grid-cols-5 items-center">
+      <div
+        className="h-16 px-space-xs grid items-center"
+        style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
+      >
         {navItems.map((item) => (
           <NavLink
             key={item.path}

@@ -10,6 +10,7 @@ export const navItems: NavItem[] = [
     isPrimaryAction: true,
   },
   { path: '/library', label: 'Library', icon: 'folder' },
+  { path: '/hub', label: 'Hub', sidebarLabel: 'Content Hub', icon: 'inventory_2' },
   { path: '/intelligence', label: 'Intel', sidebarLabel: 'Intelligence', icon: 'psychology' },
   { path: '/settings', label: 'Settings', icon: 'tune' },
 ]

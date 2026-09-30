@@ -138,3 +138,86 @@ export interface RulebookEntry {
   tags?: string[]
   showDisruptionMeter?: boolean
 }
+
+// ---------------------------------------------------------------------------
+// Content Hub: Product Knowledge, Instagram Connection, Content Import,
+// Historical Content, Content Timeline
+// ---------------------------------------------------------------------------
+
+export interface ProductKnowledge {
+  id: string
+  name: string
+  description: string
+  features: string[]
+  benefits: string[]
+  applications: string[]
+  sellingPoints: string[]
+  targetAudience: string
+  limitations: string[]
+  contentAngles: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type InstagramConnectionStatus = 'not_connected' | 'connecting' | 'connected' | 'syncing'
+
+export interface InstagramTopContentItem {
+  id: string
+  title: string
+  format: string
+  date: string
+  engagement: string
+}
+
+export interface InstagramConnection {
+  status: InstagramConnectionStatus
+  handle?: string
+  followers?: number
+  posts?: number
+  reels?: number
+  postingFrequency?: string
+  lastSyncedAt?: string
+  topPerformingContent?: InstagramTopContentItem[]
+}
+
+export type ContentSourceType =
+  | 'instagram_url'
+  | 'youtube_url'
+  | 'website_url'
+  | 'other_url'
+  | 'image'
+  | 'video'
+  | 'screenshot'
+  | 'pdf'
+  | 'text'
+  | 'speech'
+
+export type ContentSourceStatus = 'pending' | 'processing' | 'ready' | 'error'
+
+export interface ContentSourceItem {
+  id: string
+  type: ContentSourceType
+  title: string
+  /** URL for link types, transcript/pasted body for text/speech, file name for uploads */
+  value: string
+  status: ContentSourceStatus
+  addedAt: string
+  /** Local object URL for image previews only; never persisted */
+  previewUrl?: string
+}
+
+export type ContentHistoryFormat = 'Reel' | 'Carousel' | 'Static' | 'Story' | 'Video'
+export type ContentHistoryStatus = 'Published' | 'Draft' | 'Scheduled'
+
+export interface ContentHistoryItem {
+  id: string
+  title: string
+  product?: string
+  topic: string
+  format: ContentHistoryFormat
+  date: string
+  hook?: string
+  performanceLabel?: string
+  engagement?: string
+  status: ContentHistoryStatus
+}
