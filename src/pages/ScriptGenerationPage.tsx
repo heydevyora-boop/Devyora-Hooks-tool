@@ -13,6 +13,7 @@ import { RegenerateControl } from '../components/shared/script/RegenerateControl
 import {
   generateContent,
   getGeneration,
+  getGenerationByFlowchartNode,
   getVideoBlueprint,
   regenerateContent,
   approveGeneration,
@@ -25,8 +26,7 @@ import { findProductIdByName } from '../api/products'
 import { ApiError } from '../api/client'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard'
-import { seedProducts, seedContentHistory } from '../data/mockKnowledge'
-import type { ContentFlowchart, ProductKnowledge, ContentHistoryItem } from '../types'
+import type { ContentFlowchart } from '../types'
 
 export function ScriptGenerationPage() {
   const { nodeId } = useParams<{ nodeId: string }>()
@@ -35,15 +35,11 @@ export function ScriptGenerationPage() {
     'devyora-content-flowchart',
     null,
   )
-  const [products] = usePersistentState<ProductKnowledge[]>('devyora-products', seedProducts)
-  const [, setHistory] = usePersistentState<ContentHistoryItem[]>(
-    'devyora-content-history',
-    seedContentHistory,
-  )
-  // Content Hub/Plan aren't wired to the real backend yet (out of this
-  // chunk's scope) — their node/flowchart ids are frontend-only, so this
-  // just remembers which real backend generation belongs to which local
-  // node, instead of relying on a real foreign key.
+  // Plan's node/flowchart ids are frontend-only (the flowchart itself is
+  // real, backend-generated data — see PlanPage — but nodes aren't a
+  // first-class routable resource of their own), so this just remembers
+  // which real backend generation belongs to which node, instead of
+  // relying on a real foreign key.
   const [generationIdByNode, setGenerationIdByNode] = usePersistentState<Record<string, string>>(
     'devyora-generation-ids',
     {},
@@ -60,28 +56,43 @@ export function ScriptGenerationPage() {
 
   const node = flowchart?.nodes.find((n) => n.id === nodeId && n.type === 'content')
   const isPlanApproved = Boolean(flowchart?.approvedAt)
-  const product = products.find((p) => p.name === node?.product) ?? null
 
   useEffect(() => {
     if (!node) return
+    let cancelled = false
     const existingId = generationIdByNode[node.id]
-    if (!existingId) {
-      setItem(null)
-      setBlueprint(null)
-      return
-    }
-    getGeneration(existingId)
-      .then((generation) => {
+
+    // The real backend relationship (GeneratedContent.flowchartNodeId) is
+    // the source of truth — the local id map is just a cache of it. Fall
+    // back to looking the node up directly whenever the cache is empty,
+    // so a cleared cache (or a different browser/device) doesn't try to
+    // generate a second time for a node that already has content, which
+    // the backend rejects with a 409.
+    const load = existingId
+      ? getGeneration(existingId).catch(() => getGenerationByFlowchartNode(node.id))
+      : getGenerationByFlowchartNode(node.id)
+
+    load
+      .then(async (generation) => {
+        if (cancelled) return
+        if (!generation) {
+          setItem(null)
+          setBlueprint(null)
+          return
+        }
+        setGenerationIdByNode((prev) => ({ ...prev, [node.id]: generation.id }))
         setItem(generation)
-        return getVideoBlueprint(existingId)
+        setBlueprint(await getVideoBlueprint(generation.id))
       })
-      .then(setBlueprint)
       .catch(() => {
-        // The id we remembered no longer resolves (e.g. a fresh dev DB) —
-        // fall back to the pre-generation form rather than looping forever.
+        if (cancelled) return
         setItem(null)
         setBlueprint(null)
       })
+
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node?.id])
 
@@ -123,8 +134,14 @@ export function ScriptGenerationPage() {
     setIsGenerating(true)
     setError(null)
     try {
-      const productId = await findProductIdByName(product?.name ?? node.product ?? '')
+      const productId = await findProductIdByName(node.product ?? '')
       const generated = await generateContent({
+        // Links the created record to this real flowchart node
+        // server-side (GeneratedContent.flowchartNodeId) — without this,
+        // the backend has no way to know this generation belongs to the
+        // node, can't prevent a second one being created for it, and
+        // can't be found again by node id if the local id cache is lost.
+        flowchartNodeId: node.id,
         productId,
         topic: node.reason ?? node.label,
         platform: 'instagram',
@@ -189,31 +206,9 @@ export function ScriptGenerationPage() {
       const saved = await saveGeneration(item.id)
       setItem(saved)
 
-      // Content Hub's historical content list isn't wired to the backend
-      // yet (out of this chunk's scope) — mirror the save locally too so
-      // the existing local-only views stay consistent. The real,
-      // authoritative record is the ContentHistory row the backend just
-      // created (saved.contentHistoryId).
-      const historyItem: ContentHistoryItem = {
-        id: `hist-${saved.id}`,
-        title: saved.topic,
-        product: saved.product,
-        topic: saved.topic,
-        format:
-          node.contentType === 'reel'
-            ? 'Reel'
-            : node.contentType === 'carousel'
-              ? 'Carousel'
-              : node.contentType === 'story'
-                ? 'Story'
-                : 'Static',
-        date: new Date().toISOString().slice(0, 10),
-        hook: saved.hooks.find((h) => h.selected)?.text,
-        performanceLabel: undefined,
-        engagement: undefined,
-        status: 'Draft',
-      }
-      setHistory((prev) => [historyItem, ...prev])
+      // The authoritative historical record is the real ContentHistory
+      // row the backend just created (saved.contentHistoryId) — Content
+      // Hub's History tab fetches it directly, nothing to mirror locally.
       setFlowchart({
         ...flowchart,
         nodes: flowchart.nodes.map((n) => (n.id === node.id ? { ...n, status: 'done' } : n)),

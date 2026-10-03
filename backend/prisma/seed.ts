@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, type GridSlotContentType } from '@prisma/client'
 import argon2 from 'argon2'
 
 const prisma = new PrismaClient()
@@ -81,6 +81,68 @@ async function main() {
       createdBy: admin.id,
     },
   })
+
+  // Matches the frontend's existing mockGrid.ts presetGridTemplates
+  // exactly, so "Predefined grids" keeps working once Content Grid reads
+  // from the real backend instead of that local mock.
+  const presetGrids: { id: string; name: string; description: string; slots: { position: number; contentType: GridSlotContentType; label?: string }[] }[] = [
+    {
+      id: '20000000-0000-0000-0000-000000000001',
+      name: '3-2-1 Rotation',
+      description: 'Two Reels for reach, then a Carousel, then a Static post — repeat.',
+      slots: (['REEL', 'REEL', 'CAROUSEL', 'STATIC', 'REEL', 'REEL', 'CAROUSEL', 'STATIC', 'REEL'] as GridSlotContentType[]).map(
+        (contentType, position) => ({ position, contentType }),
+      ),
+    },
+    {
+      id: '20000000-0000-0000-0000-000000000002',
+      name: 'Product Spotlight',
+      description: 'Cycles evenly through your products so no single product dominates the grid.',
+      slots: (
+        [
+          ['REEL', 'Product A'],
+          ['CAROUSEL', 'Product B'],
+          ['STATIC', 'Product C'],
+          ['REEL', 'Product A'],
+          ['CAROUSEL', 'Product B'],
+          ['STATIC', 'Product C'],
+          ['REEL', 'Product A'],
+          ['CAROUSEL', 'Product B'],
+          ['STATIC', 'Product C'],
+        ] as [GridSlotContentType, string][]
+      ).map(([contentType, label], position) => ({ position, contentType, label })),
+    },
+    {
+      id: '20000000-0000-0000-0000-000000000003',
+      name: 'Balanced Mix',
+      description: 'An even split of Reels, Carousels, and Static posts across the grid.',
+      slots: (['REEL', 'CAROUSEL', 'STATIC', 'CAROUSEL', 'STATIC', 'REEL', 'STATIC', 'REEL', 'CAROUSEL'] as GridSlotContentType[]).map(
+        (contentType, position) => ({ position, contentType }),
+      ),
+    },
+  ]
+
+  for (const preset of presetGrids) {
+    await prisma.gridTemplate.upsert({
+      where: { id: preset.id },
+      update: {},
+      create: {
+        id: preset.id,
+        workspaceId: workspace.id,
+        name: preset.name,
+        description: preset.description,
+        isPreset: true,
+        createdBy: admin.id,
+        slots: {
+          create: preset.slots.map((slot) => ({
+            position: slot.position,
+            contentType: slot.contentType,
+            label: slot.label,
+          })),
+        },
+      },
+    })
+  }
 
   console.log('Seed complete:')
   console.log('  admin / admin123  (role: admin)')

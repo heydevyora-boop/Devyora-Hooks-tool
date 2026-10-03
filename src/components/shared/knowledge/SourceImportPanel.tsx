@@ -21,6 +21,7 @@ function describeError(err: unknown): string {
 export function SourceImportPanel({ sources, onChange }: SourceImportPanelProps) {
   const [urlDraft, setUrlDraft] = useState('')
   const [textDraft, setTextDraft] = useState('')
+  const [textOrigin, setTextOrigin] = useState<'text' | 'speech'>('text')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -56,8 +57,9 @@ export function SourceImportPanel({ sources, onChange }: SourceImportPanelProps)
     setError(null)
     setIsSubmitting(true)
     try {
-      addSource(await createTextSource(text, 'text'))
+      addSource(await createTextSource(text, textOrigin))
       setTextDraft('')
+      setTextOrigin('text')
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -132,13 +134,19 @@ export function SourceImportPanel({ sources, onChange }: SourceImportPanelProps)
             Paste text or dictate
           </span>
           <VoiceInputButton
-            onTranscript={(transcript) => setTextDraft(transcript)}
+            onTranscript={(transcript) => {
+              setTextOrigin('speech')
+              setTextDraft(transcript)
+            }}
           />
         </div>
         <textarea
           className="w-full bg-surface-container-low rounded-lg p-2.5 font-body-md text-body-md text-on-surface outline-none min-h-[80px] resize-y"
           value={textDraft}
-          onChange={(event) => setTextDraft(event.target.value)}
+          onChange={(event) => {
+            setTextOrigin('text')
+            setTextDraft(event.target.value)
+          }}
           placeholder="Paste a caption, transcript, or notes…"
         />
         <button

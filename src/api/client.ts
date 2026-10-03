@@ -6,6 +6,17 @@
  */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1'
 
+/**
+ * Registered by AuthProvider so any API call, anywhere in the app, that
+ * comes back 401 (session expired/invalid) clears the stale client-side
+ * session and lets ProtectedRoute's redirect-to-login take over — rather
+ * than every page having to special-case an expired session itself.
+ */
+let onUnauthorized: (() => void) | null = null
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly code?: string
@@ -35,6 +46,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
+    if (response.status === 401) onUnauthorized?.()
     const error = body?.error
     throw new ApiError(response.status, error?.message ?? 'Request failed', error?.code, error?.fields)
   }
