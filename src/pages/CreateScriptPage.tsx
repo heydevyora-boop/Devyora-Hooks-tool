@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Icon } from '../components/ui/Icon'
 import { Toggle } from '../components/ui/Toggle'
@@ -8,9 +8,11 @@ import { HookVariationCard } from '../components/shared/HookVariationCard'
 import { SceneCard } from '../components/shared/SceneCard'
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard'
 import { useViralityConfig } from '../hooks/useViralityConfig'
+import { usePersistentState } from '../hooks/usePersistentState'
 import { platforms, scriptPresets, brainIntegrations } from '../data/mockCreateScript'
 import {
   generateContent,
+  getGeneration,
   getVideoBlueprint,
   regenerateContent,
   approveGeneration,
@@ -42,16 +44,40 @@ export function CreateScriptPage() {
     Object.fromEntries(brainIntegrations.map((item) => [item.id, item.enabled])),
   )
 
-  // Video Blueprint state — real backend generation, not a static preview.
+  // Video Blueprint state — Script Studio and Video Blueprint are two views
+  // of the same backend GeneratedContent record, not separate workflows.
+  // The id is persisted so reopening Create Script (or jumping straight to
+  // the Video Blueprint tab) re-fetches the real record from the backend
+  // instead of starting from nothing.
   const { settings: viralitySettings } = useViralityConfig()
   const viralityThresholdLabel = `${viralitySettings.metricLabel} ≥ ${viralitySettings.threshold.toLocaleString()}`
+  const [generationId, setGenerationId] = usePersistentState<string | null>(
+    'devyora-create-script-generation-id',
+    null,
+  )
   const [generation, setGeneration] = useState<GeneratedContentView | null>(null)
   const [blueprint, setBlueprint] = useState<VideoBlueprintView | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isWorking, setIsWorking] = useState(false)
-  const [savedToIntelligence, setSavedToIntelligence] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { copied, copy } = useCopyToClipboard()
+
+  useEffect(() => {
+    if (!generationId || generation?.id === generationId) return
+    getGeneration(generationId)
+      .then(async (fetched) => {
+        setGeneration(fetched)
+        setBlueprint(await getVideoBlueprint(generationId))
+      })
+      .catch(() => {
+        // The remembered id no longer resolves (e.g. a fresh dev DB) —
+        // fall back to the empty state rather than looping forever.
+        setGenerationId(null)
+        setGeneration(null)
+        setBlueprint(null)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generationId])
 
   function describeError(err: unknown): string {
     return err instanceof ApiError ? err.message : "Couldn't reach the server — try again in a moment."
@@ -64,7 +90,6 @@ export function CreateScriptPage() {
     }
     setIsGenerating(true)
     setError(null)
-    setSavedToIntelligence(false)
     try {
       const productId = await findProductIdByName(productName)
       const result = await generateContent({
@@ -75,6 +100,7 @@ export function CreateScriptPage() {
       })
       setGeneration(result)
       setBlueprint(await getVideoBlueprint(result.id))
+      setGenerationId(result.id)
       changeTab('blueprint')
     } catch (err) {
       setError(describeError(err))
@@ -106,7 +132,6 @@ export function CreateScriptPage() {
       const approved = generation.status === 'approved' ? generation : await approveGeneration(generation.id)
       const saved = await saveGeneration(approved.id)
       setGeneration(saved)
-      setSavedToIntelligence(true)
     } catch (err) {
       setError(describeError(err))
     } finally {
@@ -115,6 +140,7 @@ export function CreateScriptPage() {
   }
 
   const captionText = generation?.caption ?? ''
+  const savedToIntelligence = generation?.status === 'saved'
 
   return (
     <PageContainer
