@@ -1,13 +1,15 @@
-// Devyora Hooks — backend schema, Chunk 3 scope.
+// Devyora Hooks — backend schema.
 //
-// Scope note: this migration covers exactly the entities Chunk 3 asked for
-// (Users/Roles, Products/Brand/Product Knowledge, Sources, Uploaded Files,
-// Historical Content, Content Performance) plus the two supporting entities
-// every one of those depends on for ownership: Workspace and Session. The
-// remaining entities from the Chunk 2 blueprint (grids, strategies,
-// flowcharts, generated content, approvals, etc.) are deliberately NOT
-// created here — they arrive in later chunks per the blueprint's own phased
-// plan, so this migration doesn't get ahead of what's actually being built.
+// Chunk 3 scope: Users/Roles, Products/Brand/Product Knowledge, Sources,
+// Uploaded Files, Historical Content, Content Performance, plus Workspace
+// and Session.
+//
+// Chunk 4 scope (this addition): Instagram integration, Inspiration, Content
+// Grids, Content Rules, Admin Approvals, Content Strategy, Content
+// Flowchart. Generated content / script versions / AI metrics / content
+// calendar / trends / opportunities remain future-chunk scope — still not
+// created here, same "don't get ahead of what's actually being built"
+// principle as Chunk 3.
 
 generator client {
   provider = "prisma-client-js"
@@ -31,12 +33,20 @@ model Workspace {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users          User[]
-  products       Product[]
-  brandProfile   BrandProfile?
-  mediaAssets    MediaAsset[]
-  contentSources ContentSource[]
-  contentHistory ContentHistory[]
+  users               User[]
+  products            Product[]
+  brandProfile        BrandProfile?
+  mediaAssets         MediaAsset[]
+  contentSources      ContentSource[]
+  contentHistory      ContentHistory[]
+  instagramConnection InstagramConnection?
+  inspirationItems    InspirationItem[]
+  gridTemplates       GridTemplate[]
+  activeGrid          WorkspaceActiveGrid?
+  contentRules        ContentRule[]
+  pendingApprovals    PendingApproval[]
+  contentStrategies   ContentStrategy[]
+  contentFlowcharts   ContentFlowchart[]
 
   @@map("workspaces")
 }
@@ -59,11 +69,20 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  sessions        Session[]
-  createdProducts Product[]        @relation("ProductCreatedBy")
-  uploadedMedia   MediaAsset[]     @relation("MediaUploadedBy")
-  addedSources    ContentSource[]  @relation("SourceAddedBy")
-  createdHistory  ContentHistory[] @relation("HistoryCreatedBy")
+  sessions            Session[]
+  createdProducts     Product[]             @relation("ProductCreatedBy")
+  uploadedMedia       MediaAsset[]          @relation("MediaUploadedBy")
+  addedSources        ContentSource[]       @relation("SourceAddedBy")
+  createdHistory      ContentHistory[]      @relation("HistoryCreatedBy")
+  connectedInstagram  InstagramConnection[] @relation("InstagramConnectedBy")
+  savedInspiration    InspirationItem[]     @relation("InspirationSavedBy")
+  createdGrids        GridTemplate[]        @relation("GridCreatedBy")
+  activatedGrids      WorkspaceActiveGrid[] @relation("GridSetBy")
+  createdRules        ContentRule[]         @relation("RuleCreatedBy")
+  requestedApprovals  PendingApproval[]     @relation("ApprovalRequestedBy")
+  resolvedApprovals   PendingApproval[]     @relation("ApprovalResolvedBy")
+  generatedStrategies ContentStrategy[]     @relation("StrategyGeneratedBy")
+  approvedFlowcharts  ContentFlowchart[]    @relation("FlowchartApprovedBy")
 
   @@unique([workspaceId, username])
   @@index([workspaceId])
@@ -75,14 +94,14 @@ model User {
 /// (sign-out, forced logout on role change) by deleting the row. See
 /// backend/src/services/auth.service.ts.
 model Session {
-  id          String   @id @default(uuid())
-  userId      String   @map("user_id")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now()) @map("created_at")
-  expiresAt   DateTime @map("expires_at")
-  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
-  userAgent   String?  @map("user_agent")
-  ipAddress   String?  @map("ip_address")
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @map("created_at")
+  expiresAt  DateTime @map("expires_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  userAgent  String?  @map("user_agent")
+  ipAddress  String?  @map("ip_address")
 
   @@index([userId])
   @@index([expiresAt])
@@ -131,7 +150,11 @@ model Product {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  contentHistory ContentHistory[]
+  contentHistory        ContentHistory[]
+  gridSlots             GridSlot[]
+  strategySequenceSlots StrategySequenceSlot[]
+  flowchartNodes        FlowchartNode[]
+  strategyProducts      StrategyProduct[]
 
   @@index([workspaceId])
   @@index([workspaceId, name])
@@ -203,21 +226,23 @@ enum ContentSourceStatus {
 /// §3.12 — so a `SPEECH` source arrives here as plain `value` text, same as
 /// `TEXT`, just tagged with its real origin for provenance).
 model ContentSource {
-  id              String              @id @default(uuid())
-  workspaceId     String              @map("workspace_id")
-  workspace       Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  type            ContentSourceType
-  title           String
-  value           String              @db.Text
-  mediaAssetId    String?             @map("media_asset_id")
-  mediaAsset      MediaAsset?         @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
-  status          ContentSourceStatus @default(PENDING)
-  extractedContent String?            @map("extracted_content") @db.Text
-  metadata        Json                @default("{}")
-  processingError String?             @map("processing_error") @db.Text
-  addedBy         String?             @map("added_by")
-  addedByUser     User?               @relation("SourceAddedBy", fields: [addedBy], references: [id], onDelete: SetNull)
-  addedAt         DateTime            @default(now()) @map("added_at")
+  id               String              @id @default(uuid())
+  workspaceId      String              @map("workspace_id")
+  workspace        Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  type             ContentSourceType
+  title            String
+  value            String              @db.Text
+  mediaAssetId     String?             @map("media_asset_id")
+  mediaAsset       MediaAsset?         @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  status           ContentSourceStatus @default(PENDING)
+  extractedContent String?             @map("extracted_content") @db.Text
+  metadata         Json                @default("{}")
+  processingError  String?             @map("processing_error") @db.Text
+  addedBy          String?             @map("added_by")
+  addedByUser      User?               @relation("SourceAddedBy", fields: [addedBy], references: [id], onDelete: SetNull)
+  addedAt          DateTime            @default(now()) @map("added_at")
+
+  inspirationItems InspirationItem[]
 
   @@index([workspaceId])
   @@index([workspaceId, type])
@@ -271,6 +296,7 @@ model ContentHistory {
   updatedAt         DateTime             @updatedAt @map("updated_at")
 
   performanceSnapshots ContentPerformance[]
+  instagramPost        InstagramPost?
 
   @@index([workspaceId])
   @@index([workspaceId, productId])
@@ -303,4 +329,396 @@ model ContentPerformance {
 
   @@index([contentHistoryId, capturedAt])
   @@map("content_performance")
+}
+
+// ---------------------------------------------------------------------------
+// Instagram Account Intelligence
+// ---------------------------------------------------------------------------
+
+enum InstagramConnectionStatus {
+  NOT_CONNECTED
+  CONNECTING
+  CONNECTED
+  SYNCING
+  ERROR
+}
+
+/// One row per workspace. Official Instagram Business Login / Graph API only
+/// — see src/services/instagram.service.ts. No scraping is implemented or
+/// planned: when INSTAGRAM_APP_ID/SECRET aren't configured, the service
+/// reports that honestly rather than fabricating connected-account data.
+model InstagramConnection {
+  id                String                    @id @default(uuid())
+  workspaceId       String                    @unique @map("workspace_id")
+  workspace         Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  status            InstagramConnectionStatus @default(NOT_CONNECTED)
+  handle            String?
+  externalAccountId String?                   @map("external_account_id")
+  /// AES-256-GCM ciphertext (see lib/crypto.ts) — never plaintext, never
+  /// returned by any API response.
+  accessTokenCipher String?                   @map("access_token_cipher") @db.Text
+  tokenExpiresAt    DateTime?                 @map("token_expires_at")
+  oauthState        String?                   @map("oauth_state")
+  followersCount    Int?                      @map("followers_count")
+  postsCount        Int?                      @map("posts_count")
+  reelsCount        Int?                      @map("reels_count")
+  postingFrequency  String?                   @map("posting_frequency")
+  lastSyncedAt      DateTime?                 @map("last_synced_at")
+  lastSyncError     String?                   @map("last_sync_error") @db.Text
+  connectedBy       String?                   @map("connected_by")
+  connectedByUser   User?                     @relation("InstagramConnectedBy", fields: [connectedBy], references: [id], onDelete: SetNull)
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
+
+  posts InstagramPost[]
+
+  @@map("instagram_connections")
+}
+
+enum InstagramMediaType {
+  REEL
+  CAROUSEL
+  STATIC
+  STORY
+}
+
+/// "Instagram content" — synced media, normalized into ContentHistory (see
+/// instagram.service.ts#normalizeIntoHistory) rather than being a second,
+/// divergent source of truth for what was published.
+model InstagramPost {
+  id                    String              @id @default(uuid())
+  instagramConnectionId String              @map("instagram_connection_id")
+  instagramConnection   InstagramConnection @relation(fields: [instagramConnectionId], references: [id], onDelete: Cascade)
+  externalPostId        String              @map("external_post_id")
+  mediaType             InstagramMediaType  @map("media_type")
+  mediaUrl              String?             @map("media_url") @db.Text
+  thumbnailUrl          String?             @map("thumbnail_url") @db.Text
+  caption               String?             @db.Text
+  permalink             String?             @db.Text
+  publishedAt           DateTime            @map("published_at")
+  syncedAt              DateTime            @default(now()) @map("synced_at")
+  contentHistoryId      String?             @unique @map("content_history_id")
+  contentHistory        ContentHistory?     @relation(fields: [contentHistoryId], references: [id], onDelete: SetNull)
+
+  @@unique([instagramConnectionId, externalPostId])
+  @@index([instagramConnectionId, publishedAt])
+  @@map("instagram_posts")
+}
+
+// ---------------------------------------------------------------------------
+// Inspiration
+// ---------------------------------------------------------------------------
+
+/// Pattern fields are NEVER the source's raw content verbatim — they're the
+/// user's (or, later, AI-suggested) analysis OF the source: what hook/
+/// narrative/visual/CTA pattern it demonstrates. Storing the source content
+/// itself lives on the linked ContentSource; this table only ever holds
+/// derived pattern notes, so inspiration can never accidentally become
+/// copied generated content. See Chunk 1 §3.5.
+model InspirationItem {
+  id              String        @id @default(uuid())
+  workspaceId     String        @map("workspace_id")
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contentSourceId String        @map("content_source_id")
+  contentSource   ContentSource @relation(fields: [contentSourceId], references: [id], onDelete: Cascade)
+  /// { hookPattern, topic, format, narrativeStructure, visualPattern, ctaPattern, contentAngle }
+  pattern         Json          @default("{}")
+  notes           String?       @db.Text
+  savedBy         String?       @map("saved_by")
+  savedByUser     User?         @relation("InspirationSavedBy", fields: [savedBy], references: [id], onDelete: SetNull)
+  savedAt         DateTime      @default(now()) @map("saved_at")
+
+  @@index([workspaceId])
+  @@map("inspiration_items")
+}
+
+// ---------------------------------------------------------------------------
+// Content Grids
+// ---------------------------------------------------------------------------
+
+enum GridSlotContentType {
+  REEL
+  CAROUSEL
+  STATIC
+  STORY
+  EMPTY
+}
+
+model GridTemplate {
+  id            String    @id @default(uuid())
+  workspaceId   String    @map("workspace_id")
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?   @db.Text
+  isPreset      Boolean   @default(false) @map("is_preset")
+  createdBy     String?   @map("created_by")
+  createdByUser User?     @relation("GridCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  slots             GridSlot[]
+  activeFor         WorkspaceActiveGrid?
+  contentStrategies ContentStrategy[]
+
+  @@index([workspaceId])
+  @@map("grid_templates")
+}
+
+model GridSlot {
+  id             String              @id @default(uuid())
+  gridTemplateId String              @map("grid_template_id")
+  gridTemplate   GridTemplate        @relation(fields: [gridTemplateId], references: [id], onDelete: Cascade)
+  position       Int
+  contentType    GridSlotContentType @default(EMPTY) @map("content_type")
+  productId      String?             @map("product_id")
+  product        Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  label          String?
+
+  @@unique([gridTemplateId, position])
+  @@map("grid_slots")
+}
+
+/// Which grid is "active" for the workspace right now — a tiny table
+/// instead of a column on Workspace, so activation has its own audit trail
+/// (who set it, when) and activating a different grid is a clean insert/
+/// update rather than a workspace-table write. "Deactivate" = delete this row.
+model WorkspaceActiveGrid {
+  workspaceId    String       @id @map("workspace_id")
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  gridTemplateId String       @unique @map("grid_template_id")
+  gridTemplate   GridTemplate @relation(fields: [gridTemplateId], references: [id], onDelete: Cascade)
+  setBy          String?      @map("set_by")
+  setByUser      User?        @relation("GridSetBy", fields: [setBy], references: [id], onDelete: SetNull)
+  setAt          DateTime     @default(now()) @map("set_at")
+
+  @@map("workspace_active_grid")
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge Base: Content Rules & Admin Approvals
+// ---------------------------------------------------------------------------
+
+model ContentRule {
+  id            String    @id @default(uuid())
+  workspaceId   String    @map("workspace_id")
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  category      String
+  title         String
+  description   String?   @db.Text
+  tags          Json      @default("[]")
+  isLocked      Boolean   @default(false) @map("is_locked")
+  createdBy     String?   @map("created_by")
+  createdByUser User?     @relation("RuleCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([workspaceId])
+  @@map("content_rules")
+}
+
+enum ApprovalTargetType {
+  PRODUCT
+  GRID_TEMPLATE
+  INSPIRATION
+}
+
+enum ApprovalResolution {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Deleting permanent knowledge (products, grid templates, inspiration) is
+/// never immediate — it queues a row here that only an admin can resolve.
+/// See Chunk 2 blueprint §1.8 / §2.12.
+model PendingApproval {
+  id              String             @id @default(uuid())
+  workspaceId     String             @map("workspace_id")
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  targetType      ApprovalTargetType @map("target_type")
+  targetId        String             @map("target_id")
+  targetLabel     String             @map("target_label")
+  requestedBy     String?            @map("requested_by")
+  requestedByUser User?              @relation("ApprovalRequestedBy", fields: [requestedBy], references: [id], onDelete: SetNull)
+  requestedAt     DateTime           @default(now()) @map("requested_at")
+  resolvedBy      String?            @map("resolved_by")
+  resolvedByUser  User?              @relation("ApprovalResolvedBy", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  resolvedAt      DateTime?          @map("resolved_at")
+  resolution      ApprovalResolution @default(PENDING)
+
+  @@index([workspaceId])
+  @@index([workspaceId, resolution])
+  @@map("pending_approvals")
+}
+
+// ---------------------------------------------------------------------------
+// Content Strategy & Flowchart (= "Content Plan")
+// ---------------------------------------------------------------------------
+
+enum StrategyStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model ContentStrategy {
+  id                   String         @id @default(uuid())
+  workspaceId          String         @map("workspace_id")
+  workspace            Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  goal                 String
+  objective            String?        @db.Text
+  durationWeeks        Int            @map("duration_weeks")
+  postingFrequency     String         @map("posting_frequency")
+  audience             String?        @db.Text
+  /// string[] of GridSlotContentType-like values this strategy targets —
+  /// a denormalized preference list, not something queried relationally.
+  contentTypes         Json           @default("[]") @map("content_types")
+  gridTemplateId       String?        @map("grid_template_id")
+  gridTemplate         GridTemplate?  @relation(fields: [gridTemplateId], references: [id], onDelete: SetNull)
+  startDate            DateTime       @map("start_date")
+  endDate              DateTime       @map("end_date")
+  status               StrategyStatus @default(DRAFT)
+  /// Display strings derived from the Gap Engine at generation time — see
+  /// src/services/gapEngine.service.ts. Never hand-authored.
+  contentGaps          Json           @default("[]") @map("content_gaps")
+  opportunitiesSummary Json           @default("[]") @map("opportunities_summary")
+  generatedBy          String?        @map("generated_by")
+  generatedByUser      User?          @relation("StrategyGeneratedBy", fields: [generatedBy], references: [id], onDelete: SetNull)
+  generatedAt          DateTime       @default(now()) @map("generated_at")
+
+  products  StrategyProduct[]
+  sequence  StrategySequenceSlot[]
+  flowchart ContentFlowchart?
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@map("content_strategies")
+}
+
+model StrategyProduct {
+  strategyId String          @map("strategy_id")
+  strategy   ContentStrategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  productId  String          @map("product_id")
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([strategyId, productId])
+  @@map("strategy_products")
+}
+
+model StrategySequenceSlot {
+  id          String              @id @default(uuid())
+  strategyId  String              @map("strategy_id")
+  strategy    ContentStrategy     @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  weekLabel   String              @map("week_label")
+  productId   String?             @map("product_id")
+  product     Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  contentType GridSlotContentType @map("content_type")
+  reason      String              @db.Text
+  position    Int
+
+  flowchartNode FlowchartNode?
+
+  @@index([strategyId])
+  @@map("strategy_sequence_slots")
+}
+
+enum FlowNodeType {
+  START
+  ANALYSIS
+  GAP
+  CONTENT
+  DECISION
+  END
+}
+
+enum FlowNodeStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  BLOCKED
+}
+
+enum FlowNodePriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum FlowNodeEffort {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum FlowNodeBranch {
+  YES
+  NO
+}
+
+/// = "Content Plan": the strategy's approval state lives here
+/// (`approvedAt`/`approvedBy`), not as a separate wrapper entity — see
+/// Chunk 2 blueprint §1.6 for why no standalone content_plans table exists.
+model ContentFlowchart {
+  id             String          @id @default(uuid())
+  workspaceId    String          @map("workspace_id")
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  strategyId     String          @unique @map("strategy_id")
+  strategy       ContentStrategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  generatedAt    DateTime        @default(now()) @map("generated_at")
+  approvedAt     DateTime?       @map("approved_at")
+  approvedBy     String?         @map("approved_by")
+  approvedByUser User?           @relation("FlowchartApprovedBy", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  nodes FlowchartNode[]
+  edges FlowchartEdge[]
+
+  @@map("content_flowcharts")
+}
+
+/// "Current state" and "desired destination" are represented through node
+/// `type` (START/ANALYSIS for current state, END for the destination), not
+/// separate fields — see the frontend's own FlowNodeType, which this
+/// mirrors exactly. "Dependencies" are the FlowchartEdge graph (from->to),
+/// not a redundant parallel list — an edge pointing INTO a node already IS
+/// that node's dependency.
+model FlowchartNode {
+  id                     String                @id @default(uuid())
+  flowchartId            String                @map("flowchart_id")
+  flowchart              ContentFlowchart      @relation(fields: [flowchartId], references: [id], onDelete: Cascade)
+  type                   FlowNodeType
+  label                  String
+  productId              String?               @map("product_id")
+  product                Product?              @relation(fields: [productId], references: [id], onDelete: SetNull)
+  dateLabel              String?               @map("date_label")
+  contentType            GridSlotContentType?  @map("content_type")
+  goal                   String?               @db.Text
+  status                 FlowNodeStatus        @default(PENDING)
+  priority               FlowNodePriority?
+  effort                 FlowNodeEffort?
+  reason                 String?               @db.Text
+  gridPosition           Int?                  @map("grid_position")
+  branch                 FlowNodeBranch?
+  strategySequenceSlotId String?               @unique @map("strategy_sequence_slot_id")
+  strategySequenceSlot   StrategySequenceSlot? @relation(fields: [strategySequenceSlotId], references: [id], onDelete: SetNull)
+
+  outgoingEdges FlowchartEdge[] @relation("EdgeFrom")
+  incomingEdges FlowchartEdge[] @relation("EdgeTo")
+
+  @@index([flowchartId])
+  @@map("flowchart_nodes")
+}
+
+model FlowchartEdge {
+  id          String           @id @default(uuid())
+  flowchartId String           @map("flowchart_id")
+  flowchart   ContentFlowchart @relation(fields: [flowchartId], references: [id], onDelete: Cascade)
+  fromNodeId  String           @map("from_node_id")
+  fromNode    FlowchartNode    @relation("EdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNodeId    String           @map("to_node_id")
+  toNode      FlowchartNode    @relation("EdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+  label       String?
+
+  @@index([flowchartId])
+  @@map("flowchart_edges")
 }

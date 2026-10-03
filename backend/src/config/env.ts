@@ -11,6 +11,22 @@ const envSchema = z.object({
   LOCAL_STORAGE_ROOT: z.string().min(1).default('./storage/uploads'),
   MEDIA_PUBLIC_BASE_PATH: z.string().min(1).default('/media/files'),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(209715200),
+
+  // AES-256-GCM key for encrypting Instagram OAuth tokens at rest — 32
+  // bytes, hex-encoded (64 hex chars). Required even if Instagram isn't
+  // configured yet, so the column format never silently changes later.
+  ENCRYPTION_KEY: z
+    .string()
+    .length(64, 'ENCRYPTION_KEY must be 64 hex characters (32 bytes)')
+    .regex(/^[0-9a-f]{64}$/i, 'ENCRYPTION_KEY must be hex-encoded'),
+
+  // Official Instagram Business Login / Graph API credentials — optional.
+  // When absent, the Instagram integration honestly reports itself as
+  // "not configured" rather than fabricating connected-account data. See
+  // src/services/instagram.service.ts.
+  INSTAGRAM_APP_ID: z.string().optional(),
+  INSTAGRAM_APP_SECRET: z.string().optional(),
+  INSTAGRAM_REDIRECT_URI: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -28,4 +44,7 @@ export const env = {
   isProduction: parsed.data.NODE_ENV === 'production',
   isDevelopment: parsed.data.NODE_ENV === 'development',
   isTest: parsed.data.NODE_ENV === 'test',
+  isInstagramConfigured: Boolean(
+    parsed.data.INSTAGRAM_APP_ID && parsed.data.INSTAGRAM_APP_SECRET && parsed.data.INSTAGRAM_REDIRECT_URI,
+  ),
 }

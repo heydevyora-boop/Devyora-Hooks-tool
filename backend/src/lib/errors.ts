@@ -14,6 +14,7 @@ export type ErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'RATE_LIMITED'
+  | 'NOT_CONFIGURED'
   | 'INTERNAL_ERROR'
 
 export class AppError extends Error {
@@ -63,6 +64,19 @@ export class NotFoundError extends AppError {
 export class ConflictError extends AppError {
   constructor(message = 'This conflicts with existing state') {
     super(409, 'CONFLICT', message)
+  }
+}
+
+/**
+ * A real integration exists but its credentials aren't set for this
+ * environment (e.g. Instagram app ID/secret). Distinct from NOT_FOUND
+ * (resource) and FORBIDDEN (permission) — the caller did nothing wrong,
+ * the feature just isn't configured here. Never used to paper over a
+ * missing feature with fabricated data.
+ */
+export class NotConfiguredError extends AppError {
+  constructor(message = 'This integration is not configured') {
+    super(501, 'NOT_CONFIGURED', message)
   }
 }
 

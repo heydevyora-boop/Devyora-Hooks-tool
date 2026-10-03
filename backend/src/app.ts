@@ -14,6 +14,15 @@ import { brandRoutes } from './routes/brand.routes.js'
 import { sourceRoutes } from './routes/source.routes.js'
 import { mediaRoutes } from './routes/media.routes.js'
 import { contentHistoryRoutes } from './routes/contentHistory.routes.js'
+import { instagramRoutes } from './routes/instagram.routes.js'
+import { inspirationRoutes } from './routes/inspiration.routes.js'
+import { gridRoutes } from './routes/grid.routes.js'
+import { contentRuleRoutes } from './routes/contentRule.routes.js'
+import { approvalRoutes } from './routes/approval.routes.js'
+import { knowledgeBaseRoutes } from './routes/knowledgeBase.routes.js'
+import { gapEngineRoutes } from './routes/gapEngine.routes.js'
+import { strategyRoutes } from './routes/strategy.routes.js'
+import { flowchartRoutes } from './routes/flowchart.routes.js'
 import { healthRoutes } from './routes/health.routes.js'
 
 export async function buildApp() {
@@ -100,6 +109,15 @@ export async function buildApp() {
   await app.register(sourceRoutes, { prefix: '/api/v1' })
   await app.register(mediaRoutes, { prefix: '/api/v1' })
   await app.register(contentHistoryRoutes, { prefix: '/api/v1' })
+  await app.register(instagramRoutes, { prefix: '/api/v1' })
+  await app.register(inspirationRoutes, { prefix: '/api/v1' })
+  await app.register(gridRoutes, { prefix: '/api/v1' })
+  await app.register(contentRuleRoutes, { prefix: '/api/v1' })
+  await app.register(approvalRoutes, { prefix: '/api/v1' })
+  await app.register(knowledgeBaseRoutes, { prefix: '/api/v1' })
+  await app.register(gapEngineRoutes, { prefix: '/api/v1' })
+  await app.register(strategyRoutes, { prefix: '/api/v1' })
+  await app.register(flowchartRoutes, { prefix: '/api/v1' })
 
   return app
 }

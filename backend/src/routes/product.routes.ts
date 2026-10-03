@@ -12,4 +12,5 @@ export async function productRoutes(app: FastifyInstance) {
   app.get('/products/:id', { preHandler: requireAuth }, productController.getProduct)
   app.post('/products', { preHandler: requireAuth }, productController.createProduct)
   app.patch('/products/:id', { preHandler: requireAuth }, productController.updateProduct)
+  app.delete('/products/:id', { preHandler: requireAuth }, productController.requestDeleteProduct)
 }
