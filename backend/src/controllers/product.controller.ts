@@ -3,6 +3,7 @@ import { parseOrThrow } from '../lib/validate.js'
 import { productInputSchema, productListQuerySchema, productUpdateSchema } from '../validation/product.schema.js'
 import * as productService from '../services/product.service.js'
 import * as approvalService from '../services/approval.service.js'
+import { getProductIntelligence } from '../services/productIntelligence.service.js'
 
 export async function listProducts(request: FastifyRequest, reply: FastifyReply) {
   const query = parseOrThrow(productListQuerySchema, request.query)
@@ -27,6 +28,12 @@ export async function updateProduct(request: FastifyRequest, reply: FastifyReply
   const input = parseOrThrow(productUpdateSchema, request.body)
   const product = await productService.updateProduct(request.principal!.workspaceId, id, input)
   return reply.send({ product })
+}
+
+export async function getProductIntelligenceHandler(request: FastifyRequest, reply: FastifyReply) {
+  const { id } = request.params as { id: string }
+  const intelligence = await getProductIntelligence(request.principal!.workspaceId, id)
+  return reply.send({ intelligence })
 }
 
 /**

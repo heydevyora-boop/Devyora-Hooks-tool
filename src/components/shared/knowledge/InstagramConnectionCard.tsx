@@ -1,5 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { Icon } from '../../ui/Icon'
+import { ApiError } from '../../../api/client'
+import { connectInstagram, disconnectInstagram, syncInstagram } from '../../../api/instagram'
 import type { InstagramConnection } from '../../../types'
 
 interface InstagramConnectionCardProps {
@@ -7,50 +9,50 @@ interface InstagramConnectionCardProps {
   onChange: (next: InstagramConnection) => void
 }
 
-const DEMO_CONNECTED_DATA: Partial<InstagramConnection> = {
-  handle: '@devyorahooks',
-  followers: 18400,
-  posts: 214,
-  reels: 96,
-  postingFrequency: '4x / week',
-  topPerformingContent: [
-    { id: 'ig-1', title: '5 SOC2 Mistakes That Kill Enterprise Deals', format: 'Reel', date: '12 Aug', engagement: '1.2M views' },
-    { id: 'ig-2', title: 'GRC Cracks: Why Manual Audits Fail Fast', format: 'Reel', date: '27 Aug', engagement: '850k views' },
-  ],
-}
-
 function formatCount(value?: number) {
   if (value === undefined) return '—'
   return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value)
 }
 
+function describeError(err: unknown): string {
+  if (err instanceof ApiError) return err.message
+  return "Couldn't reach the server — try again in a moment."
+}
+
 export function InstagramConnectionCard({ connection, onChange }: InstagramConnectionCardProps) {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current)
-  }, [])
-
-  const handleConnect = () => {
+  const handleConnect = async () => {
+    setError(null)
     onChange({ status: 'connecting' })
-    timeoutRef.current = setTimeout(() => {
-      onChange({
-        status: 'connected',
-        ...DEMO_CONNECTED_DATA,
-        lastSyncedAt: new Date().toISOString(),
-      })
-    }, 1400)
+    try {
+      const { oauthUrl } = await connectInstagram()
+      window.location.href = oauthUrl
+    } catch (err) {
+      onChange({ status: 'not_connected' })
+      setError(describeError(err))
+    }
   }
 
-  const handleSync = () => {
+  const handleSync = async () => {
+    setError(null)
     onChange({ ...connection, status: 'syncing' })
-    timeoutRef.current = setTimeout(() => {
-      onChange({ ...connection, status: 'connected', lastSyncedAt: new Date().toISOString() })
-    }, 1200)
+    try {
+      onChange(await syncInstagram())
+    } catch (err) {
+      onChange({ ...connection, status: 'connected' })
+      setError(describeError(err))
+    }
   }
 
-  const handleDisconnect = () => {
-    onChange({ status: 'not_connected' })
+  const handleDisconnect = async () => {
+    setError(null)
+    try {
+      await disconnectInstagram()
+      onChange({ status: 'not_connected' })
+    } catch (err) {
+      setError(describeError(err))
+    }
   }
 
   if (connection.status === 'not_connected' || connection.status === 'connecting') {
@@ -78,6 +80,12 @@ export function InstagramConnectionCard({ connection, onChange }: InstagramConne
             linked to a Facebook Page. Personal accounts aren't supported by Instagram's API.
           </p>
         </div>
+        {error && (
+          <div className="bg-error-container rounded-lg p-2.5 flex items-start gap-2">
+            <Icon name="error" className="text-error text-[16px] mt-0.5" />
+            <p className="font-label-sm text-label-sm text-on-error-container">{error}</p>
+          </div>
+        )}
         <button
           type="button"
           onClick={handleConnect}
@@ -128,13 +136,12 @@ export function InstagramConnectionCard({ connection, onChange }: InstagramConne
         </button>
       </div>
 
-      <div className="bg-tertiary-fixed text-on-tertiary-fixed-variant rounded-lg p-2.5 flex items-start gap-2">
-        <Icon name="warning" className="text-[16px] mt-0.5" />
-        <p className="font-label-sm text-label-sm">
-          Demo data — this preview isn't live yet. Real numbers will sync once the Instagram Graph
-          API connection is wired up on the backend.
-        </p>
-      </div>
+      {error && (
+        <div className="bg-error-container rounded-lg p-2.5 flex items-start gap-2">
+          <Icon name="error" className="text-error text-[16px] mt-0.5" />
+          <p className="font-label-sm text-label-sm text-on-error-container">{error}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-2">
         <div className="bg-surface-container-low rounded-lg p-2.5 flex flex-col">

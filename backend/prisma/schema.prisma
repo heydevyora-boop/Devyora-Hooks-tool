@@ -49,6 +49,7 @@ model Workspace {
   contentFlowcharts   ContentFlowchart[]
   generatedContent    GeneratedContent[]
   viralityConfig      ViralityConfig?
+  calendarEntries     CalendarEntry[]
 
   @@map("workspaces")
 }
@@ -71,26 +72,27 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  sessions            Session[]
-  createdProducts     Product[]                 @relation("ProductCreatedBy")
-  uploadedMedia       MediaAsset[]              @relation("MediaUploadedBy")
-  addedSources        ContentSource[]           @relation("SourceAddedBy")
-  createdHistory      ContentHistory[]          @relation("HistoryCreatedBy")
-  connectedInstagram  InstagramConnection[]     @relation("InstagramConnectedBy")
-  savedInspiration    InspirationItem[]         @relation("InspirationSavedBy")
-  createdGrids        GridTemplate[]            @relation("GridCreatedBy")
-  activatedGrids      WorkspaceActiveGrid[]     @relation("GridSetBy")
-  createdRules        ContentRule[]             @relation("RuleCreatedBy")
-  requestedApprovals  PendingApproval[]         @relation("ApprovalRequestedBy")
-  resolvedApprovals   PendingApproval[]         @relation("ApprovalResolvedBy")
-  generatedStrategies ContentStrategy[]         @relation("StrategyGeneratedBy")
-  approvedFlowcharts  ContentFlowchart[]        @relation("FlowchartApprovedBy")
-  generatedContent    GeneratedContent[]        @relation("GeneratedContentGeneratedBy")
-  rejectedContent     GeneratedContent[]        @relation("GeneratedContentRejectedBy")
-  approvedContent     GeneratedContent[]        @relation("GeneratedContentApprovedBy")
-  publishedContent    GeneratedContent[]        @relation("GeneratedContentPublishedBy")
-  generatedVersions   GeneratedContentVersion[] @relation("GeneratedContentVersionCreatedBy")
-  viralityConfigEdits ViralityConfig[]          @relation("ViralityConfigUpdatedBy")
+  sessions               Session[]
+  createdProducts        Product[]                 @relation("ProductCreatedBy")
+  uploadedMedia          MediaAsset[]              @relation("MediaUploadedBy")
+  addedSources           ContentSource[]           @relation("SourceAddedBy")
+  createdHistory         ContentHistory[]          @relation("HistoryCreatedBy")
+  connectedInstagram     InstagramConnection[]     @relation("InstagramConnectedBy")
+  savedInspiration       InspirationItem[]         @relation("InspirationSavedBy")
+  createdGrids           GridTemplate[]            @relation("GridCreatedBy")
+  activatedGrids         WorkspaceActiveGrid[]     @relation("GridSetBy")
+  createdRules           ContentRule[]             @relation("RuleCreatedBy")
+  requestedApprovals     PendingApproval[]         @relation("ApprovalRequestedBy")
+  resolvedApprovals      PendingApproval[]         @relation("ApprovalResolvedBy")
+  generatedStrategies    ContentStrategy[]         @relation("StrategyGeneratedBy")
+  approvedFlowcharts     ContentFlowchart[]        @relation("FlowchartApprovedBy")
+  generatedContent       GeneratedContent[]        @relation("GeneratedContentGeneratedBy")
+  rejectedContent        GeneratedContent[]        @relation("GeneratedContentRejectedBy")
+  approvedContent        GeneratedContent[]        @relation("GeneratedContentApprovedBy")
+  publishedContent       GeneratedContent[]        @relation("GeneratedContentPublishedBy")
+  generatedVersions      GeneratedContentVersion[] @relation("GeneratedContentVersionCreatedBy")
+  viralityConfigEdits    ViralityConfig[]          @relation("ViralityConfigUpdatedBy")
+  createdCalendarEntries CalendarEntry[]           @relation("CalendarEntryCreatedBy")
 
   @@unique([workspaceId, username])
   @@index([workspaceId])
@@ -164,6 +166,7 @@ model Product {
   flowchartNodes        FlowchartNode[]
   strategyProducts      StrategyProduct[]
   generatedContent      GeneratedContent[]
+  calendarEntries       CalendarEntry[]
 
   @@index([workspaceId])
   @@index([workspaceId, name])
@@ -601,6 +604,7 @@ model ContentStrategy {
   sequence         StrategySequenceSlot[]
   flowchart        ContentFlowchart?
   generatedContent GeneratedContent[]
+  calendarEntries  CalendarEntry[]
 
   @@index([workspaceId])
   @@index([workspaceId, status])
@@ -716,6 +720,7 @@ model FlowchartNode {
   outgoingEdges    FlowchartEdge[]   @relation("EdgeFrom")
   incomingEdges    FlowchartEdge[]   @relation("EdgeTo")
   generatedContent GeneratedContent?
+  calendarEntry    CalendarEntry?
 
   @@index([flowchartId])
   @@map("flowchart_nodes")
@@ -819,7 +824,8 @@ model GeneratedContent {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  versions GeneratedContentVersion[]
+  versions      GeneratedContentVersion[]
+  calendarEntry CalendarEntry?
 
   @@index([workspaceId])
   @@index([workspaceId, stage])
@@ -929,4 +935,57 @@ model ViralityConfig {
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   @@map("virality_configs")
+}
+
+// ---------------------------------------------------------------------------
+// Content Calendar (Chunk 6)
+// ---------------------------------------------------------------------------
+
+enum CalendarEntryStatus {
+  PLANNED
+  SCHEDULED
+  PUBLISHED
+  SKIPPED
+}
+
+/// A real-date scheduling layer on top of planning — distinct from
+/// StrategySequenceSlot/FlowchartNode, which use display labels like
+/// "Week 1" rather than an actual date, and from ContentHistory, which is
+/// what was *actually* published. An entry may optionally link to the
+/// flowchart node and/or generated content it came from (both @unique —
+/// at most one calendar entry per node/generation), but can also stand
+/// alone for a quickly-planned item with no plan behind it yet.
+model CalendarEntry {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  date         DateTime
+  title        String
+  productId    String?              @map("product_id")
+  product      Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  contentType  GridSlotContentType? @map("content_type")
+  platform     String               @default("instagram")
+  gridPosition Int?                 @map("grid_position")
+  strategyId   String?              @map("strategy_id")
+  strategy     ContentStrategy?     @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+
+  flowchartNodeId    String?           @unique @map("flowchart_node_id")
+  flowchartNode      FlowchartNode?    @relation(fields: [flowchartNodeId], references: [id], onDelete: SetNull)
+  generatedContentId String?           @unique @map("generated_content_id")
+  generatedContent   GeneratedContent? @relation(fields: [generatedContentId], references: [id], onDelete: SetNull)
+
+  status CalendarEntryStatus @default(PLANNED)
+  notes  String?             @db.Text
+
+  createdBy     String?  @map("created_by")
+  createdByUser User?    @relation("CalendarEntryCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([workspaceId])
+  @@index([workspaceId, date])
+  @@index([workspaceId, productId])
+  @@index([workspaceId, status])
+  @@map("calendar_entries")
 }

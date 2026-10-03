@@ -26,9 +26,9 @@ export async function callback(request: FastifyRequest, reply: FastifyReply) {
 
   try {
     await instagramService.completeConnect(request.principal!.workspaceId, query)
-    return reply.redirect(`${redirectBase}/content-hub?instagram=connected`)
+    return reply.redirect(`${redirectBase}/hub?instagram=connected`)
   } catch {
-    return reply.redirect(`${redirectBase}/content-hub?instagram=error`)
+    return reply.redirect(`${redirectBase}/hub?instagram=error`)
   }
 }
 

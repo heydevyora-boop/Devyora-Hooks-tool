@@ -3,83 +3,95 @@ import { Icon } from '../../ui/Icon'
 import { FileDropzone } from '../../ui/FileDropzone'
 import { VoiceInputButton } from '../../ui/VoiceInputButton'
 import { SourceListItem } from './SourceListItem'
-import type { ContentSourceItem, ContentSourceType } from '../../../types'
+import { ApiError } from '../../../api/client'
+import { createTextSource, createUrlSource, createFileSource, deleteSource } from '../../../api/sources'
+import { uploadMedia } from '../../../api/media'
+import type { ContentSourceItem } from '../../../types'
 
 interface SourceImportPanelProps {
   sources: ContentSourceItem[]
   onChange: (next: ContentSourceItem[]) => void
 }
 
-function detectUrlType(url: string): ContentSourceType {
-  if (/instagram\.com/i.test(url)) return 'instagram_url'
-  if (/youtube\.com|youtu\.be/i.test(url)) return 'youtube_url'
-  if (/^https?:\/\//i.test(url)) return 'website_url'
-  return 'other_url'
-}
-
-function classifyFile(file: File): ContentSourceType {
-  if (file.type.startsWith('image/')) return 'image'
-  if (file.type.startsWith('video/')) return 'video'
-  return 'pdf'
-}
-
-function makeItem(partial: Omit<ContentSourceItem, 'id' | 'status' | 'addedAt'>): ContentSourceItem {
-  return {
-    ...partial,
-    id: `source-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    status: 'ready',
-    addedAt: new Date().toISOString(),
-  }
+function describeError(err: unknown): string {
+  if (err instanceof ApiError) return err.message
+  return "Couldn't reach the server — try again in a moment."
 }
 
 export function SourceImportPanel({ sources, onChange }: SourceImportPanelProps) {
   const [urlDraft, setUrlDraft] = useState('')
   const [textDraft, setTextDraft] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const addSource = (item: ContentSourceItem) => onChange([item, ...sources])
-  const removeSource = (id: string) => onChange(sources.filter((source) => source.id !== id))
+  const removeSource = async (id: string) => {
+    setError(null)
+    try {
+      await deleteSource(id)
+      onChange(sources.filter((source) => source.id !== id))
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
 
-  const handleAddUrl = () => {
+  const handleAddUrl = async () => {
     const url = urlDraft.trim()
     if (!url) return
-    addSource(
-      makeItem({
-        type: detectUrlType(url),
-        title: url.replace(/^https?:\/\//, '').slice(0, 60),
-        value: url,
-      }),
-    )
-    setUrlDraft('')
+    setError(null)
+    setIsSubmitting(true)
+    try {
+      addSource(await createUrlSource(url))
+      setUrlDraft('')
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleAddText = () => {
+  const handleAddText = async () => {
     const text = textDraft.trim()
     if (!text) return
-    addSource(
-      makeItem({
-        type: 'text',
-        title: text.length > 60 ? `${text.slice(0, 60)}…` : text,
-        value: text,
-      }),
-    )
-    setTextDraft('')
+    setError(null)
+    setIsSubmitting(true)
+    try {
+      addSource(await createTextSource(text, 'text'))
+      setTextDraft('')
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleFiles = (files: File[]) => {
-    const newItems = files.map((file) => {
-      const type = classifyFile(file)
-      return makeItem({
-        type,
-        title: file.name,
-        value: file.name,
-        previewUrl: type === 'image' ? URL.createObjectURL(file) : undefined,
-      })
-    })
-    onChange([...newItems, ...sources])
+  const handleFiles = async (files: File[]) => {
+    setError(null)
+    setIsSubmitting(true)
+    try {
+      for (const file of files) {
+        const asset = await uploadMedia(file)
+        const source = await createFileSource(asset.id)
+        addSource(
+          file.type.startsWith('image/') ? { ...source, previewUrl: URL.createObjectURL(file) } : source,
+        )
+      }
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
     <div className="flex flex-col gap-space-md">
+      {error && (
+        <div className="bg-error-container rounded-lg p-2.5 flex items-start gap-2">
+          <Icon name="error" className="text-error text-[16px] mt-0.5" />
+          <p className="font-label-sm text-label-sm text-on-error-container">{error}</p>
+        </div>
+      )}
+
       <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-3">
         <span className="font-label-md text-label-md text-on-surface font-semibold">
           Add from a URL
@@ -99,7 +111,8 @@ export function SourceImportPanel({ sources, onChange }: SourceImportPanelProps)
           <button
             type="button"
             onClick={handleAddUrl}
-            className="px-4 py-2.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold"
+            disabled={isSubmitting || !urlDraft.trim()}
+            className="px-4 py-2.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold disabled:opacity-60"
           >
             Add
           </button>
@@ -131,7 +144,7 @@ export function SourceImportPanel({ sources, onChange }: SourceImportPanelProps)
         <button
           type="button"
           onClick={handleAddText}
-          disabled={!textDraft.trim()}
+          disabled={isSubmitting || !textDraft.trim()}
           className="self-end px-4 py-2 rounded-lg bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold disabled:opacity-50"
         >
           Add Source

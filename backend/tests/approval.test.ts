@@ -48,8 +48,11 @@ describe('approvals (gated deletion of important knowledge)', () => {
     })
     expect(stillThere.statusCode).toBe(200)
 
+    // Listing is open to any authenticated user — whoever requested a
+    // deletion needs to see it's pending — only resolving it is admin-only.
     const nonAdminList = await app.inject({ method: 'GET', url: '/api/v1/approvals', headers: { cookie: userCookie } })
-    expect(nonAdminList.statusCode).toBe(403)
+    expect(nonAdminList.statusCode).toBe(200)
+    expect(nonAdminList.json().items.some((a: { id: string }) => a.id === approval.id)).toBe(true)
 
     const nonAdminApprove = await app.inject({
       method: 'POST',

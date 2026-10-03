@@ -3,6 +3,8 @@ import { Icon } from '../../ui/Icon'
 import { SourceImportPanel } from './SourceImportPanel'
 import { InspirationCard } from './InspirationCard'
 import { InspirationPatternForm } from './InspirationPatternForm'
+import { ApiError } from '../../../api/client'
+import { createInspiration, updateInspiration } from '../../../api/inspiration'
 import type { ContentSourceItem, InspirationItem, InspirationPattern } from '../../../types'
 
 const EMPTY_PATTERN: InspirationPattern = {
@@ -22,11 +24,18 @@ interface InspirationTabProps {
   isPendingDeletion: (id: string) => boolean
 }
 
+function describeError(err: unknown): string {
+  if (err instanceof ApiError) return err.message
+  return "Couldn't reach the server — try again in a moment."
+}
+
 /**
  * Reuses SourceImportPanel (built for Content Import) for every intake
  * mechanic — URL, file upload, paste-text, voice — rather than duplicating
- * that UI. Each newly added source is immediately wrapped into a draft
- * InspirationItem so the user can tag its pattern.
+ * that UI. Each newly added source is a real, already-persisted
+ * ContentSourceItem; it's held as a pending candidate until the pattern
+ * form is saved, since the backend only creates an InspirationItem once
+ * a contentSourceId and a pattern are both available.
  */
 export function InspirationTab({
   items,
@@ -34,23 +43,46 @@ export function InspirationTab({
   onRequestDelete,
   isPendingDeletion,
 }: InspirationTabProps) {
-  const [intakeSources, setIntakeSources] = useState<ContentSourceItem[]>([])
+  const [pendingSource, setPendingSource] = useState<ContentSourceItem | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleIntakeChange = (next: ContentSourceItem[]) => {
-    if (next.length > intakeSources.length) {
-      const newSource = next[0]
-      const draft: InspirationItem = {
-        id: `insp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        source: newSource,
-        pattern: EMPTY_PATTERN,
-        savedAt: new Date().toISOString(),
-      }
-      onChange([draft, ...items])
-      setEditingId(draft.id)
-      setIntakeSources([])
-    } else {
-      setIntakeSources(next)
+    const newSource = next[0]
+    if (newSource) {
+      setError(null)
+      setEditingId(null)
+      setPendingSource(newSource)
+    }
+  }
+
+  const handleSavePending = async (pattern: InspirationPattern) => {
+    if (!pendingSource) return
+    setError(null)
+    setIsSaving(true)
+    try {
+      const item = await createInspiration(pendingSource.id, pattern)
+      onChange([item, ...items])
+      setPendingSource(null)
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSaveEdit = async (id: string, pattern: InspirationPattern) => {
+    setError(null)
+    setIsSaving(true)
+    try {
+      const updated = await updateInspiration(id, { pattern })
+      onChange(items.map((i) => (i.id === id ? updated : i)))
+      setEditingId(null)
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -63,7 +95,22 @@ export function InspirationTab({
         </p>
       </div>
 
-      <SourceImportPanel sources={intakeSources} onChange={handleIntakeChange} />
+      {error && (
+        <div className="bg-error-container rounded-lg p-2.5 flex items-start gap-2">
+          <Icon name="error" className="text-error text-[16px] mt-0.5" />
+          <p className="font-label-sm text-label-sm text-on-error-container">{error}</p>
+        </div>
+      )}
+
+      <SourceImportPanel sources={[]} onChange={handleIntakeChange} />
+
+      {pendingSource && (
+        <InspirationPatternForm
+          initialPattern={EMPTY_PATTERN}
+          onSave={handleSavePending}
+          onCancel={() => setPendingSource(null)}
+        />
+      )}
 
       {items.length > 0 && (
         <div className="flex flex-col gap-2.5">
@@ -75,10 +122,7 @@ export function InspirationTab({
               <InspirationPatternForm
                 key={item.id}
                 initialPattern={item.pattern}
-                onSave={(pattern) => {
-                  onChange(items.map((i) => (i.id === item.id ? { ...i, pattern } : i)))
-                  setEditingId(null)
-                }}
+                onSave={(pattern) => handleSaveEdit(item.id, pattern)}
                 onCancel={() => setEditingId(null)}
               />
             ) : isPendingDeletion(item.id) ? (
@@ -103,6 +147,9 @@ export function InspirationTab({
             ),
           )}
         </div>
+      )}
+      {isSaving && (
+        <span className="font-label-sm text-label-sm text-on-surface-variant">Saving…</span>
       )}
     </div>
   )

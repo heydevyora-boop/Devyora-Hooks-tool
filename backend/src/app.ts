@@ -25,6 +25,11 @@ import { strategyRoutes } from './routes/strategy.routes.js'
 import { flowchartRoutes } from './routes/flowchart.routes.js'
 import { generationRoutes } from './routes/generation.routes.js'
 import { viralityRoutes } from './routes/virality.routes.js'
+import { calendarRoutes } from './routes/calendar.routes.js'
+import { contentHealthRoutes } from './routes/contentHealth.routes.js'
+import { trendsRoutes } from './routes/trends.routes.js'
+import { dashboardRoutes } from './routes/dashboard.routes.js'
+import { adminRoutes } from './routes/admin.routes.js'
 import { healthRoutes } from './routes/health.routes.js'
 
 export async function buildApp() {
@@ -122,6 +127,11 @@ export async function buildApp() {
   await app.register(flowchartRoutes, { prefix: '/api/v1' })
   await app.register(generationRoutes, { prefix: '/api/v1' })
   await app.register(viralityRoutes, { prefix: '/api/v1' })
+  await app.register(calendarRoutes, { prefix: '/api/v1' })
+  await app.register(contentHealthRoutes, { prefix: '/api/v1' })
+  await app.register(trendsRoutes, { prefix: '/api/v1' })
+  await app.register(dashboardRoutes, { prefix: '/api/v1' })
+  await app.register(adminRoutes, { prefix: '/api/v1' })
 
   return app
 }

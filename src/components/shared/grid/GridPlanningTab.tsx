@@ -7,7 +7,10 @@ import type { GridSlotDefinition, GridTemplate, ProductKnowledge } from '../../.
 
 interface GridPlanningTabProps {
   templates: GridTemplate[]
-  onChange: (next: GridTemplate[]) => void
+  /** Returns the real, backend-assigned template that was created or
+   * updated — `handleSave` needs its real id to activate it, since a new
+   * grid's local id is only a temporary placeholder. */
+  onChange: (next: GridTemplate[]) => Promise<GridTemplate | undefined>
   activeGridId: string | null
   onSetActiveGridId: (id: string) => void
   products: ProductKnowledge[]
@@ -71,13 +74,15 @@ export function GridPlanningTab({
     })
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingTemplate) return
     const exists = templates.some((template) => template.id === editingTemplate.id)
-    const saved = { ...editingTemplate, updatedAt: new Date().toISOString() }
-    onChange(exists ? templates.map((t) => (t.id === saved.id ? saved : t)) : [saved, ...templates])
-    onSetActiveGridId(saved.id)
-    setEditingTemplate(null)
+    const draft = { ...editingTemplate, updatedAt: new Date().toISOString() }
+    const saved = await onChange(exists ? templates.map((t) => (t.id === draft.id ? draft : t)) : [draft, ...templates])
+    if (saved) {
+      onSetActiveGridId(saved.id)
+      setEditingTemplate(null)
+    }
   }
 
   if (editingTemplate) {

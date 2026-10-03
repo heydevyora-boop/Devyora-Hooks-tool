@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Icon } from '../components/ui/Icon'
 import { PageContainer } from '../components/layout/PageContainer'
@@ -10,15 +10,21 @@ import { ContentHistoryCard } from '../components/shared/knowledge/ContentHistor
 import { ContentTimeline } from '../components/shared/knowledge/ContentTimeline'
 import { InspirationTab } from '../components/shared/knowledge/InspirationTab'
 import { GridPlanningTab } from '../components/shared/grid/GridPlanningTab'
-import { usePersistentState } from '../hooks/usePersistentState'
-import { seedProducts, initialInstagramConnection, seedContentHistory } from '../data/mockKnowledge'
-import { presetGridTemplates } from '../data/mockGrid'
+import { ApiError } from '../api/client'
+import { listProducts, createProduct, updateProduct, requestDeleteProduct, type ApprovalView } from '../api/products'
+import { getInstagramStatus } from '../api/instagram'
+import { listSources } from '../api/sources'
+import { listContentHistory } from '../api/history'
+import { listInspiration, requestDeleteInspiration } from '../api/inspiration'
+import { listGridTemplates, getActiveGridTemplate, createGridTemplate, updateGridTemplate, activateGridTemplate, requestDeleteGridTemplate } from '../api/grid'
+import { listApprovals } from '../api/approvals'
 import type {
   ProductKnowledge,
   ContentSourceItem,
+  InstagramConnection,
+  ContentHistoryItem,
   InspirationItem,
   GridTemplate,
-  PendingApproval,
   ApprovalTargetType,
 } from '../types'
 
@@ -36,6 +42,11 @@ const TABS: { id: HubTab; label: string; icon: string }[] = [
 
 const TAB_IDS = TABS.map((tab) => tab.id)
 
+function describeError(err: unknown): string {
+  if (err instanceof ApiError) return err.message
+  return "Couldn't reach the server — try again in a moment."
+}
+
 export function ContentHubPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialTab = TAB_IDS.includes(searchParams.get('tab') as HubTab)
@@ -48,72 +59,162 @@ export function ContentHubPage() {
     setSearchParams(tab === 'products' ? {} : { tab })
   }
 
-  const [products, setProducts] = usePersistentState<ProductKnowledge[]>(
-    'devyora-products',
-    seedProducts,
-  )
-  const [instagramConnection, setInstagramConnection] = usePersistentState(
-    'devyora-instagram-connection',
-    initialInstagramConnection,
-  )
-  const [sources, setSources] = usePersistentState<ContentSourceItem[]>(
-    'devyora-content-sources',
-    [],
-  )
-  const [history] = usePersistentState('devyora-content-history', seedContentHistory)
-  const [inspirationItems, setInspirationItems] = usePersistentState<InspirationItem[]>(
-    'devyora-inspiration-items',
-    [],
-  )
-  const [gridTemplates, setGridTemplates] = usePersistentState<GridTemplate[]>(
-    'devyora-grid-templates',
-    presetGridTemplates,
-  )
-  const [activeGridId, setActiveGridId] = usePersistentState<string | null>(
-    'devyora-active-grid-id',
-    null,
-  )
-  const [pendingApprovals, setPendingApprovals] = usePersistentState<PendingApproval[]>(
-    'devyora-pending-approvals',
-    [],
-  )
+  const [products, setProducts] = useState<ProductKnowledge[]>([])
+  const [instagramConnection, setInstagramConnection] = useState<InstagramConnection>({ status: 'not_connected' })
+  const [sources, setSources] = useState<ContentSourceItem[]>([])
+  const [history, setHistory] = useState<ContentHistoryItem[]>([])
+  const [inspirationItems, setInspirationItems] = useState<InspirationItem[]>([])
+  const [gridTemplates, setGridTemplates] = useState<GridTemplate[]>([])
+  const [activeGridId, setActiveGridId] = useState<string | null>(null)
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalView[]>([])
+
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setIsLoading(true)
+      setLoadError(null)
+      try {
+        const [
+          productsResult,
+          instagramResult,
+          sourcesResult,
+          historyResult,
+          inspirationResult,
+          gridResult,
+          activeGridResult,
+          approvalsResult,
+        ] = await Promise.all([
+          listProducts(),
+          getInstagramStatus(),
+          listSources(),
+          listContentHistory(),
+          listInspiration(),
+          listGridTemplates(),
+          getActiveGridTemplate(),
+          listApprovals(),
+        ])
+        if (cancelled) return
+        setProducts(productsResult)
+        setInstagramConnection(instagramResult)
+        setSources(sourcesResult)
+        setHistory(historyResult)
+        setInspirationItems(inspirationResult)
+        setGridTemplates(gridResult)
+        setActiveGridId(activeGridResult?.id ?? null)
+        setPendingApprovals(approvalsResult)
+      } catch (err) {
+        if (!cancelled) setLoadError(describeError(err))
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const instagramParam = searchParams.get('instagram')
+    if (!instagramParam) return
+    if (instagramParam === 'connected') {
+      getInstagramStatus().then(setInstagramConnection).catch((err) => setActionError(describeError(err)))
+    } else if (instagramParam === 'error') {
+      setActionError('Instagram connection could not be completed. Please try again.')
+    }
+    const next = new URLSearchParams(searchParams)
+    next.delete('instagram')
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null)
   const [isAddingProduct, setIsAddingProduct] = useState(false)
 
   const editingProduct = products.find((product) => product.id === editingProductId)
 
-  const handleSaveProduct = (product: ProductKnowledge) => {
-    setProducts((prev) => {
-      const exists = prev.some((item) => item.id === product.id)
-      return exists ? prev.map((item) => (item.id === product.id ? product : item)) : [product, ...prev]
-    })
-    setEditingProductId(null)
-    setIsAddingProduct(false)
+  const handleSaveProduct = async (product: ProductKnowledge) => {
+    setActionError(null)
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...input } = product
+    try {
+      if (editingProductId) {
+        const saved = await updateProduct(editingProductId, input)
+        setProducts((prev) => prev.map((item) => (item.id === saved.id ? saved : item)))
+      } else {
+        const saved = await createProduct(input)
+        setProducts((prev) => [saved, ...prev])
+      }
+      setEditingProductId(null)
+      setIsAddingProduct(false)
+    } catch (err) {
+      setActionError(describeError(err))
+    }
   }
 
   const isPendingDeletion = (targetId: string) =>
-    pendingApprovals.some((approval) => approval.targetId === targetId)
+    pendingApprovals.some((approval) => approval.targetId === targetId && approval.resolution === 'pending')
 
   /**
    * Deletion of permanent knowledge (products, grid templates, inspiration
-   * patterns) is never immediate — it queues a PendingApproval that only the
-   * Knowledge Base's admin-approval panel (on the Intelligence page) can
-   * resolve, per the requirement that important knowledge removal requires
-   * admin approval.
+   * patterns) is never immediate — it queues a PendingApproval that only an
+   * admin can resolve (Settings → Admin), per the requirement that
+   * important knowledge removal requires admin approval.
    */
-  const requestDelete = (targetType: ApprovalTargetType, targetId: string, targetLabel: string) => {
+  const requestDelete = async (targetType: ApprovalTargetType, targetId: string, targetLabel: string) => {
     if (isPendingDeletion(targetId)) return
-    setPendingApprovals((prev) => [
-      ...prev,
-      {
-        id: `approval-${Date.now()}`,
-        targetType,
-        targetId,
-        targetLabel,
-        requestedAt: new Date().toISOString(),
-      },
-    ])
+    setActionError(null)
+    try {
+      const approval =
+        targetType === 'product'
+          ? await requestDeleteProduct(targetId)
+          : targetType === 'grid_template'
+            ? await requestDeleteGridTemplate(targetId)
+            : await requestDeleteInspiration(targetId)
+      setPendingApprovals((prev) => [...prev, approval])
+      void targetLabel
+    } catch (err) {
+      setActionError(describeError(err))
+    }
+  }
+
+  const handleGridChange = async (next: GridTemplate[]): Promise<GridTemplate | undefined> => {
+    setActionError(null)
+    try {
+      if (next.length > gridTemplates.length) {
+        const draft = next[0]!
+        const saved = await createGridTemplate(draft)
+        setGridTemplates([saved, ...gridTemplates])
+        return saved
+      } else {
+        const changed = next.find((template) => {
+          const existing = gridTemplates.find((item) => item.id === template.id)
+          return existing && JSON.stringify(existing) !== JSON.stringify(template)
+        })
+        if (changed) {
+          const saved = await updateGridTemplate(changed.id, changed)
+          setGridTemplates((prev) => prev.map((item) => (item.id === saved.id ? saved : item)))
+          return saved
+        }
+        return undefined
+      }
+    } catch (err) {
+      setActionError(describeError(err))
+      return undefined
+    }
+  }
+
+  const handleSetActiveGridId = async (id: string) => {
+    setActionError(null)
+    try {
+      await activateGridTemplate(id)
+      setActiveGridId(id)
+    } catch (err) {
+      setActionError(describeError(err))
+    }
   }
 
   return (
@@ -127,6 +228,19 @@ export function ContentHubPage() {
           created.
         </p>
       </div>
+
+      {loadError && (
+        <div className="bg-error-container rounded-lg p-2.5 flex items-start gap-2">
+          <Icon name="error" className="text-error text-[16px] mt-0.5" />
+          <p className="font-label-sm text-label-sm text-on-error-container">{loadError}</p>
+        </div>
+      )}
+      {actionError && (
+        <div className="bg-error-container rounded-lg p-2.5 flex items-start gap-2">
+          <Icon name="error" className="text-error text-[16px] mt-0.5" />
+          <p className="font-label-sm text-label-sm text-on-error-container">{actionError}</p>
+        </div>
+      )}
 
       <div className="w-full overflow-x-auto no-scrollbar py-space-xs -mx-gutter-mobile px-gutter-mobile lg:mx-0 lg:px-0">
         <div className="flex items-center gap-space-xs whitespace-nowrap min-w-max">
@@ -147,105 +261,116 @@ export function ContentHubPage() {
         </div>
       </div>
 
-      <div className="mt-space-sm lg:mt-6 flex flex-col gap-space-md lg:max-w-3xl">
-        {activeTab === 'products' && (
-          <>
-            {!isAddingProduct && !editingProduct && (
-              <button
-                type="button"
-                onClick={() => setIsAddingProduct(true)}
-                className="w-full py-3 px-4 rounded-xl bg-surface-container-high text-primary font-title text-[14px] flex items-center justify-center gap-2 lg:hover:bg-surface-container-highest transition-colors"
-              >
-                <Icon name="add" className="text-[18px]" />
-                <span>Add Product</span>
-              </button>
-            )}
-
-            {isAddingProduct && (
-              <ProductForm onSave={handleSaveProduct} onCancel={() => setIsAddingProduct(false)} />
-            )}
-
-            <div className="flex flex-col gap-2.5">
-              {products.map((product) =>
-                editingProductId === product.id ? (
-                  <ProductForm
-                    key={product.id}
-                    initialProduct={product}
-                    onSave={handleSaveProduct}
-                    onCancel={() => setEditingProductId(null)}
-                  />
-                ) : isPendingDeletion(product.id) ? (
-                  <div
-                    key={product.id}
-                    className="rounded-xl bg-surface-container-low p-3.5 flex items-center justify-between"
-                  >
-                    <span className="font-body-sm text-body-sm text-on-surface-variant truncate">
-                      {product.name}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-[11px] font-semibold">
-                      Pending admin approval
-                    </span>
-                  </div>
-                ) : (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    onEdit={() => setEditingProductId(product.id)}
-                    onDelete={() => requestDelete('product', product.id, product.name)}
-                  />
-                ),
+      {isLoading ? (
+        <div className="mt-space-sm lg:mt-6 font-body-sm text-body-sm text-on-surface-variant">
+          Loading…
+        </div>
+      ) : (
+        <div className="mt-space-sm lg:mt-6 flex flex-col gap-space-md lg:max-w-3xl">
+          {activeTab === 'products' && (
+            <>
+              {!isAddingProduct && !editingProduct && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingProduct(true)}
+                  className="w-full py-3 px-4 rounded-xl bg-surface-container-high text-primary font-title text-[14px] flex items-center justify-center gap-2 lg:hover:bg-surface-container-highest transition-colors"
+                >
+                  <Icon name="add" className="text-[18px]" />
+                  <span>Add Product</span>
+                </button>
               )}
-              {products.length === 0 && !isAddingProduct && (
+
+              {isAddingProduct && (
+                <ProductForm onSave={handleSaveProduct} onCancel={() => setIsAddingProduct(false)} />
+              )}
+
+              <div className="flex flex-col gap-2.5">
+                {products.map((product) =>
+                  editingProductId === product.id ? (
+                    <ProductForm
+                      key={product.id}
+                      initialProduct={product}
+                      onSave={handleSaveProduct}
+                      onCancel={() => setEditingProductId(null)}
+                    />
+                  ) : isPendingDeletion(product.id) ? (
+                    <div
+                      key={product.id}
+                      className="rounded-xl bg-surface-container-low p-3.5 flex items-center justify-between"
+                    >
+                      <span className="font-body-sm text-body-sm text-on-surface-variant truncate">
+                        {product.name}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-[11px] font-semibold">
+                        Pending admin approval
+                      </span>
+                    </div>
+                  ) : (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      onEdit={() => setEditingProductId(product.id)}
+                      onDelete={() => requestDelete('product', product.id, product.name)}
+                    />
+                  ),
+                )}
+                {products.length === 0 && !isAddingProduct && (
+                  <div className="rounded-xl bg-surface-container-low p-space-md text-center font-body-sm text-body-sm text-on-surface-variant">
+                    No products yet — add one to start building permanent product intelligence.
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {activeTab === 'instagram' && (
+            <InstagramConnectionCard
+              connection={instagramConnection}
+              onChange={setInstagramConnection}
+            />
+          )}
+
+          {activeTab === 'import' && (
+            <SourceImportPanel sources={sources} onChange={setSources} />
+          )}
+
+          {activeTab === 'history' && (
+            <div className="flex flex-col gap-2.5">
+              {history.map((item) => (
+                <ContentHistoryCard key={item.id} item={item} />
+              ))}
+              {history.length === 0 && (
                 <div className="rounded-xl bg-surface-container-low p-space-md text-center font-body-sm text-body-sm text-on-surface-variant">
-                  No products yet — add one to start building permanent product intelligence.
+                  No published content yet.
                 </div>
               )}
             </div>
-          </>
-        )}
+          )}
 
-        {activeTab === 'instagram' && (
-          <InstagramConnectionCard
-            connection={instagramConnection}
-            onChange={setInstagramConnection}
-          />
-        )}
+          {activeTab === 'timeline' && <ContentTimeline items={history} />}
 
-        {activeTab === 'import' && (
-          <SourceImportPanel sources={sources} onChange={setSources} />
-        )}
+          {activeTab === 'inspiration' && (
+            <InspirationTab
+              items={inspirationItems}
+              onChange={setInspirationItems}
+              onRequestDelete={(id, label) => requestDelete('inspiration', id, label)}
+              isPendingDeletion={isPendingDeletion}
+            />
+          )}
 
-        {activeTab === 'history' && (
-          <div className="flex flex-col gap-2.5">
-            {history.map((item) => (
-              <ContentHistoryCard key={item.id} item={item} />
-            ))}
-          </div>
-        )}
-
-        {activeTab === 'timeline' && <ContentTimeline items={history} />}
-
-        {activeTab === 'inspiration' && (
-          <InspirationTab
-            items={inspirationItems}
-            onChange={setInspirationItems}
-            onRequestDelete={(id, label) => requestDelete('inspiration', id, label)}
-            isPendingDeletion={isPendingDeletion}
-          />
-        )}
-
-        {activeTab === 'grid' && (
-          <GridPlanningTab
-            templates={gridTemplates}
-            onChange={setGridTemplates}
-            activeGridId={activeGridId}
-            onSetActiveGridId={setActiveGridId}
-            products={products}
-            onRequestDelete={(id, label) => requestDelete('grid_template', id, label)}
-            isPendingDeletion={isPendingDeletion}
-          />
-        )}
-      </div>
+          {activeTab === 'grid' && (
+            <GridPlanningTab
+              templates={gridTemplates}
+              onChange={handleGridChange}
+              activeGridId={activeGridId}
+              onSetActiveGridId={handleSetActiveGridId}
+              products={products}
+              onRequestDelete={(id, label) => requestDelete('grid_template', id, label)}
+              isPendingDeletion={isPendingDeletion}
+            />
+          )}
+        </div>
+      )}
     </PageContainer>
   )
 }

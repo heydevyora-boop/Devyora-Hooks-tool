@@ -9,6 +9,7 @@ interface ContentFlowchartProps {
   onChange: (next: ContentFlowchartType) => void
   onRegenerateAll: () => void
   onApprovePlan: () => void
+  onApproveNode: (nodeId: string) => void
   generatedNodeIds: Set<string>
 }
 
@@ -19,6 +20,7 @@ export function ContentFlowchart({
   onChange,
   onRegenerateAll,
   onApprovePlan,
+  onApproveNode,
   generatedNodeIds,
 }: ContentFlowchartProps) {
   const [expandedId, setExpandedId] = useState<string | null>(flowchart.nodes[0]?.id ?? null)
@@ -105,7 +107,7 @@ export function ContentFlowchart({
                 onToggleExpand={() => setExpandedId(expandedId === node.id ? null : node.id)}
                 onRegenerate={node.type === 'content' ? () => regenerateNode(node) : undefined}
                 onApprove={
-                  node.status !== 'done' ? () => updateNode(node.id, { status: 'done' }) : undefined
+                  node.status !== 'done' ? () => onApproveNode(node.id) : undefined
                 }
                 onMoveUp={contentIndex >= 0 ? () => moveContentNode(index, -1) : undefined}
                 onMoveDown={contentIndex >= 0 ? () => moveContentNode(index, 1) : undefined}

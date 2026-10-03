@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../components/ui/Icon'
 import { PageContainer } from '../components/layout/PageContainer'
@@ -7,30 +8,54 @@ import { RecentScriptRow } from '../components/shared/RecentScriptRow'
 import { HomeIntelCard } from '../components/shared/HomeIntelCard'
 import { statCards, topScripts, recentScripts } from '../data/mockHome'
 import { usePersistentState } from '../hooks/usePersistentState'
-import { seedProducts, initialInstagramConnection } from '../data/mockKnowledge'
-import type { ProductKnowledge, InstagramConnection, ContentStrategyPlan, ContentFlowchart } from '../types'
+import { ApiError } from '../api/client'
+import { getDashboard, type DashboardView } from '../api/dashboard'
+import type { ContentFlowchart } from '../types'
+
+function describeError(err: unknown): string {
+  if (err instanceof ApiError) return err.message
+  return "Couldn't reach the server — try again in a moment."
+}
 
 export function HomePage() {
-  // Reads the same persisted state the Content Hub / Plan pages write to —
-  // this section reflects real planning progress, never a second mock copy.
-  const [products] = usePersistentState<ProductKnowledge[]>('devyora-products', seedProducts)
-  const [instagramConnection] = usePersistentState<InstagramConnection>(
-    'devyora-instagram-connection',
-    initialInstagramConnection,
-  )
-  const [strategyPlan] = usePersistentState<ContentStrategyPlan | null>(
-    'devyora-content-strategy',
-    null,
-  )
+  // The one piece of planning state still read from the Plan page's own
+  // persisted key — it's the real per-node approval ratio for the active
+  // flowchart, which the Dashboard aggregator doesn't break out by node
+  // type. Everything else below comes straight from GET /dashboard.
   const [flowchart] = usePersistentState<ContentFlowchart | null>('devyora-content-flowchart', null)
+
+  const [dashboard, setDashboard] = useState<DashboardView | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getDashboard()
+      .then((result) => {
+        if (!cancelled) setDashboard(result)
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(describeError(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const contentNodes = flowchart?.nodes.filter((node) => node.type === 'content') ?? []
   const doneContentNodes = contentNodes.filter((node) => node.status === 'done')
-  const contentGaps = strategyPlan?.contentGaps ?? []
-  const opportunities = strategyPlan?.opportunities ?? []
+  const contentGaps = dashboard?.contentGaps ?? []
+  const opportunities = dashboard?.newOpportunities ?? []
+  const instagramConnection = dashboard?.instagram ?? { status: 'not_connected' as const }
+  const productIntelligenceCount = dashboard?.productIntelligence.length ?? 0
 
   return (
     <PageContainer className="flex flex-col space-y-space-md lg:space-y-8 py-space-md lg:py-8">
+      {loadError && (
+        <div className="bg-error-container rounded-lg p-2.5 flex items-start gap-2">
+          <Icon name="error" className="text-error text-[16px] mt-0.5" />
+          <p className="font-label-sm text-label-sm text-on-error-container">{loadError}</p>
+        </div>
+      )}
       <section className="flex flex-col space-y-1">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-1.5">
@@ -148,7 +173,7 @@ export function HomePage() {
             icon="troubleshoot"
             label="Content Gaps"
             value={contentGaps.length > 0 ? `${contentGaps.length} identified` : '—'}
-            detail={contentGaps[0] ?? 'Build a strategy to see gaps'}
+            detail={contentGaps[0]?.description ?? 'No content gaps detected right now'}
             tone={contentGaps.length > 0 ? 'attention' : 'muted'}
             to="/plan"
           />
@@ -156,15 +181,15 @@ export function HomePage() {
             icon="lightbulb"
             label="New Opportunities"
             value={opportunities.length > 0 ? `${opportunities.length} found` : '—'}
-            detail={opportunities[0] ?? 'Build a strategy to see opportunities'}
+            detail={opportunities[0]?.description ?? 'No new opportunities detected right now'}
             tone={opportunities.length > 0 ? 'positive' : 'muted'}
             to="/plan"
           />
           <HomeIntelCard
             icon="inventory_2"
             label="Product Intelligence"
-            value={String(products.length)}
-            detail={products.length === 1 ? 'product tracked' : 'products tracked'}
+            value={String(productIntelligenceCount)}
+            detail={productIntelligenceCount === 1 ? 'product tracked' : 'products tracked'}
             to="/hub?tab=products"
           />
         </div>

@@ -30,7 +30,11 @@ export async function downloadMedia(request: FastifyRequest, reply: FastifyReply
   const { id } = request.params as { id: string }
   const asset = await mediaService.getMediaAssetForDownload(request.principal!.workspaceId, id)
 
+  // `originalFilename` is user-supplied and stored verbatim — escape it
+  // for safe use inside a quoted Content-Disposition value rather than
+  // trusting it to never contain a `"` or `\`.
+  const safeFilename = asset.originalFilename.replace(/[\\"]/g, '\\$&')
   reply.header('Content-Type', asset.mimeType)
-  reply.header('Content-Disposition', `inline; filename="${asset.originalFilename}"`)
+  reply.header('Content-Disposition', `inline; filename="${safeFilename}"`)
   return reply.send(storage.readStream(asset.storageKey))
 }

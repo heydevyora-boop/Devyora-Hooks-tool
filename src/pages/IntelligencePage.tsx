@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '../components/ui/Icon'
 import { PageContainer } from '../components/layout/PageContainer'
 import { KnowledgeModuleCard } from '../components/shared/KnowledgeModuleCard'
@@ -7,63 +7,105 @@ import { RulebookCard } from '../components/shared/RulebookCard'
 import { RetentionCurveChart } from '../components/shared/RetentionCurveChart'
 import { KnowledgeSourceTile } from '../components/shared/knowledge/KnowledgeSourceTile'
 import { PendingApprovalsPanel } from '../components/shared/knowledge/PendingApprovalsPanel'
-import { usePersistentState } from '../hooks/usePersistentState'
-import { seedProducts, seedContentHistory } from '../data/mockKnowledge'
-import { presetGridTemplates } from '../data/mockGrid'
+import { useAuth } from '../hooks/useAuth'
+import { ApiError } from '../api/client'
+import { getKnowledgeBaseOverview, type KnowledgeBaseOverview } from '../api/knowledgeBase'
+import { listApprovals, approveApproval, rejectApproval } from '../api/approvals'
+import { listContentRules } from '../api/contentRules'
 import {
   intelligenceCategories,
   knowledgeModules,
   microModules,
-  rulebookEntries,
 } from '../data/mockIntelligence'
-import type {
-  ProductKnowledge,
-  ContentHistoryItem,
-  InspirationItem,
-  GridTemplate,
-  PendingApproval,
-} from '../types'
+import type { ApprovalView } from '../api/products'
+import type { ContentRuleView } from '../api/contentRules'
+import type { RulebookEntry } from '../types'
+
+const CATEGORY_COLOR_CLASSES = ['text-tertiary', 'text-error', 'text-primary', 'text-secondary']
+
+function colorClassForCategory(category: string): string {
+  let hash = 0
+  for (let i = 0; i < category.length; i++) hash = (hash * 31 + category.charCodeAt(i)) >>> 0
+  return CATEGORY_COLOR_CLASSES[hash % CATEGORY_COLOR_CLASSES.length]!
+}
+
+function toRulebookEntry(rule: ContentRuleView): RulebookEntry {
+  return {
+    id: rule.id,
+    category: rule.category,
+    categoryColorClass: colorClassForCategory(rule.category),
+    title: rule.title,
+    description: rule.description,
+    tags: rule.tags.length > 0 ? rule.tags : undefined,
+  }
+}
+
+function describeError(err: unknown): string {
+  if (err instanceof ApiError) return err.message
+  return "Couldn't reach the server — try again in a moment."
+}
 
 export function IntelligencePage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [activeCategory, setActiveCategory] = useState('knowledge-base')
 
-  // Read the same persisted keys Content Hub writes to, so this vault
-  // reflects real counts instead of a second, divergent copy of the data.
-  const [products, setProducts] = usePersistentState<ProductKnowledge[]>(
-    'devyora-products',
-    seedProducts,
-  )
-  const [history] = usePersistentState<ContentHistoryItem[]>(
-    'devyora-content-history',
-    seedContentHistory,
-  )
-  const [inspirationItems, setInspirationItems] = usePersistentState<InspirationItem[]>(
-    'devyora-inspiration-items',
-    [],
-  )
-  const [gridTemplates, setGridTemplates] = usePersistentState<GridTemplate[]>(
-    'devyora-grid-templates',
-    presetGridTemplates,
-  )
-  const [pendingApprovals, setPendingApprovals] = usePersistentState<PendingApproval[]>(
-    'devyora-pending-approvals',
-    [],
-  )
+  const [overview, setOverview] = useState<KnowledgeBaseOverview | null>(null)
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalView[]>([])
+  const [rules, setRules] = useState<ContentRuleView[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
-  const handleApprove = (approval: PendingApproval) => {
-    if (approval.targetType === 'product') {
-      setProducts((prev) => prev.filter((item) => item.id !== approval.targetId))
-    } else if (approval.targetType === 'grid_template') {
-      setGridTemplates((prev) => prev.filter((item) => item.id !== approval.targetId))
-    } else if (approval.targetType === 'inspiration') {
-      setInspirationItems((prev) => prev.filter((item) => item.id !== approval.targetId))
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setIsLoading(true)
+      setLoadError(null)
+      try {
+        const [overviewResult, approvalsResult, rulesResult] = await Promise.all([
+          getKnowledgeBaseOverview(),
+          listApprovals('pending'),
+          listContentRules(),
+        ])
+        if (cancelled) return
+        setOverview(overviewResult)
+        setPendingApprovals(approvalsResult)
+        setRules(rulesResult)
+      } catch (err) {
+        if (!cancelled) setLoadError(describeError(err))
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
     }
-    setPendingApprovals((prev) => prev.filter((item) => item.id !== approval.id))
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleApprove = async (approval: ApprovalView) => {
+    setActionError(null)
+    try {
+      await approveApproval(approval.id)
+      setPendingApprovals((prev) => prev.filter((item) => item.id !== approval.id))
+      setOverview(await getKnowledgeBaseOverview())
+    } catch (err) {
+      setActionError(describeError(err))
+    }
   }
 
-  const handleReject = (approval: PendingApproval) => {
-    setPendingApprovals((prev) => prev.filter((item) => item.id !== approval.id))
+  const handleReject = async (approval: ApprovalView) => {
+    setActionError(null)
+    try {
+      await rejectApproval(approval.id)
+      setPendingApprovals((prev) => prev.filter((item) => item.id !== approval.id))
+    } catch (err) {
+      setActionError(describeError(err))
+    }
   }
+
+  const lockedRuleCount = rules.filter((rule) => rule.isLocked).length
 
   return (
     <PageContainer className="flex flex-col py-space-md lg:py-8">
@@ -90,6 +132,19 @@ export function IntelligencePage() {
         </div>
       </div>
 
+      {loadError && (
+        <div className="bg-error-container rounded-lg p-2.5 flex items-start gap-2">
+          <Icon name="error" className="text-error text-[16px] mt-0.5" />
+          <p className="font-label-sm text-label-sm text-on-error-container">{loadError}</p>
+        </div>
+      )}
+      {actionError && (
+        <div className="bg-error-container rounded-lg p-2.5 flex items-start gap-2">
+          <Icon name="error" className="text-error text-[16px] mt-0.5" />
+          <p className="font-label-sm text-label-sm text-on-error-container">{actionError}</p>
+        </div>
+      )}
+
       <div className="w-full overflow-x-auto no-scrollbar py-space-xs -mx-gutter-mobile px-gutter-mobile lg:mx-0 lg:px-0">
         <div className="flex items-center gap-space-xs whitespace-nowrap min-w-max">
           {intelligenceCategories.map((category) => (
@@ -109,150 +164,162 @@ export function IntelligencePage() {
         </div>
       </div>
 
-      <div className="mt-space-sm lg:mt-6 flex flex-col gap-space-lg lg:gap-10">
-        <section className="flex flex-col gap-space-sm lg:gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-space-xs">
-              <Icon name="folder_supervised" className="text-[18px] text-primary" />
-              <h2 className="font-title text-title lg:text-headline-sm lg:font-headline-sm text-on-surface">
-                Knowledge Base Vault
-              </h2>
-            </div>
-            <span className="font-code text-label-sm text-on-surface-variant">
-              9 Modules Active
-            </span>
-          </div>
-
-          <PendingApprovalsPanel
-            approvals={pendingApprovals}
-            onApprove={handleApprove}
-            onReject={handleReject}
-          />
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-            <KnowledgeSourceTile
-              icon="inventory_2"
-              label="Products"
-              count={products.length}
-              to="/hub?tab=products"
-            />
-            <KnowledgeSourceTile
-              icon="history"
-              label="Content History"
-              count={history.length}
-              to="/hub?tab=history"
-            />
-            <KnowledgeSourceTile
-              icon="grid_view"
-              label="Grid Structures"
-              count={gridTemplates.length}
-              to="/hub?tab=grid"
-            />
-            <KnowledgeSourceTile
-              icon="auto_awesome"
-              label="Inspiration Patterns"
-              count={inspirationItems.length}
-              to="/hub?tab=inspiration"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 lg:gap-3.5">
-            {knowledgeModules.slice(0, 5).map((module) => (
-              <KnowledgeModuleCard key={module.id} module={module} />
-            ))}
-
-            <div className="grid grid-cols-2 gap-2.5 lg:gap-3.5">
-              {microModules.map((module) => (
-                <MicroModuleCard
-                  key={module.id}
-                  icon={module.icon}
-                  iconColorClass={module.iconColorClass}
-                  title={module.title}
-                  description={module.description}
-                  meta={module.meta}
-                  metaColorClass={module.metaColorClass}
-                />
-              ))}
-            </div>
-
-            <KnowledgeModuleCard module={knowledgeModules[5]} />
-          </div>
-        </section>
-
-        <div className="w-full h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-
-        <section className="flex flex-col gap-space-sm lg:gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-space-xs">
-              <Icon name="rule" className="text-[18px] text-primary" />
-              <h2 className="font-title text-title lg:text-headline-sm lg:font-headline-sm text-on-surface">
-                Permanent Rulebook
-              </h2>
-            </div>
-            <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-primary font-code text-label-sm">
-              4 Locked Rules
-            </span>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 lg:gap-3.5">
-            {rulebookEntries.map((rule) => (
-              <RulebookCard key={rule.id} rule={rule} />
-            ))}
-          </div>
-        </section>
-
-        <div className="w-full h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-
-        <section className="flex flex-col gap-space-sm lg:gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-space-xs">
-              <Icon name="troubleshoot" className="text-[18px] text-tertiary" />
-              <h2 className="font-title text-title lg:text-headline-sm lg:font-headline-sm text-on-surface">
-                Failure Analysis Engine
-              </h2>
-            </div>
-            <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-code text-label-sm">
-              Self-Correcting
-            </span>
-          </div>
-          <div className="p-4 lg:p-6 rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-3 lg:max-w-3xl">
+      {isLoading ? (
+        <div className="mt-space-sm lg:mt-6 font-body-sm text-body-sm text-on-surface-variant">
+          Loading…
+        </div>
+      ) : (
+        <div className="mt-space-sm lg:mt-6 flex flex-col gap-space-lg lg:gap-10">
+          <section className="flex flex-col gap-space-sm lg:gap-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-error animate-ping" />
-                <span className="font-code text-label-sm text-error font-medium">
-                  Incident #89 Self-Correction
-                </span>
+              <div className="flex items-center gap-space-xs">
+                <Icon name="folder_supervised" className="text-[18px] text-primary" />
+                <h2 className="font-title text-title lg:text-headline-sm lg:font-headline-sm text-on-surface">
+                  Knowledge Base Vault
+                </h2>
               </div>
-              <span className="font-code text-[11px] text-on-surface-variant">2h ago</span>
-            </div>
-            <p className="font-body-sm text-body-sm text-on-surface">
-              Script #89 underperformed because product demo was shown without establishing pain
-              point first. Auto-guardrail applied to generator prompts.
-            </p>
-            <RetentionCurveChart />
-            <div className="flex items-center gap-2 pt-1">
-              <Icon name="auto_mode" className="text-[16px] text-primary" />
-              <span className="font-code text-label-sm text-primary">
-                Rule patch v4.8 deployed across all active nodes
+              <span className="font-code text-label-sm text-on-surface-variant">
+                9 Modules Active
               </span>
             </div>
-          </div>
-        </section>
 
-        <section className="flex flex-col lg:flex-row gap-2.5 lg:gap-3 pt-space-xs pb-space-lg lg:pb-2 lg:max-w-2xl">
-          <button className="w-full lg:flex-1 py-3 px-4 rounded-xl bg-primary text-on-primary font-title text-[14px] flex items-center justify-center gap-2 shadow-md lg:hover:bg-primary/90 transition-colors">
-            <Icon name="mic" className="text-[18px]" />
-            <span>Sync New Customer Call Recording</span>
-          </button>
-          <button className="w-full lg:flex-1 py-3 px-4 rounded-xl bg-surface-container-high text-on-surface font-title text-[14px] flex items-center justify-center gap-2 lg:hover:bg-surface-container-highest transition-colors">
-            <Icon name="edit_note" className="text-[18px]" />
-            <span>Update Rulebook</span>
-          </button>
-          <button className="w-full lg:flex-1 py-3 px-4 rounded-xl bg-surface-container text-primary font-title text-[14px] flex items-center justify-center gap-2 lg:hover:bg-surface-container-high transition-colors">
-            <Icon name="offline_bolt" className="text-[18px]" />
-            <span>Run Intelligence Audit</span>
-          </button>
-        </section>
-      </div>
+            <PendingApprovalsPanel
+              approvals={pendingApprovals}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              isAdmin={isAdmin}
+            />
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+              <KnowledgeSourceTile
+                icon="inventory_2"
+                label="Products"
+                count={overview?.products.count ?? 0}
+                to="/hub?tab=products"
+              />
+              <KnowledgeSourceTile
+                icon="history"
+                label="Content History"
+                count={overview?.historicalContent.count ?? 0}
+                to="/hub?tab=history"
+              />
+              <KnowledgeSourceTile
+                icon="grid_view"
+                label="Grid Structures"
+                count={overview?.contentGrids.count ?? 0}
+                to="/hub?tab=grid"
+              />
+              <KnowledgeSourceTile
+                icon="auto_awesome"
+                label="Inspiration Patterns"
+                count={overview?.inspiration.count ?? 0}
+                to="/hub?tab=inspiration"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 lg:gap-3.5">
+              {knowledgeModules.slice(0, 5).map((module) => (
+                <KnowledgeModuleCard key={module.id} module={module} />
+              ))}
+
+              <div className="grid grid-cols-2 gap-2.5 lg:gap-3.5">
+                {microModules.map((module) => (
+                  <MicroModuleCard
+                    key={module.id}
+                    icon={module.icon}
+                    iconColorClass={module.iconColorClass}
+                    title={module.title}
+                    description={module.description}
+                    meta={module.meta}
+                    metaColorClass={module.metaColorClass}
+                  />
+                ))}
+              </div>
+
+              <KnowledgeModuleCard module={knowledgeModules[5]} />
+            </div>
+          </section>
+
+          <div className="w-full h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+
+          <section className="flex flex-col gap-space-sm lg:gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-space-xs">
+                <Icon name="rule" className="text-[18px] text-primary" />
+                <h2 className="font-title text-title lg:text-headline-sm lg:font-headline-sm text-on-surface">
+                  Permanent Rulebook
+                </h2>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-primary font-code text-label-sm">
+                {lockedRuleCount} Locked Rule{lockedRuleCount === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 lg:gap-3.5">
+              {rules.map((rule) => (
+                <RulebookCard key={rule.id} rule={toRulebookEntry(rule)} />
+              ))}
+              {rules.length === 0 && (
+                <div className="rounded-xl bg-surface-container-low p-space-md text-center font-body-sm text-body-sm text-on-surface-variant lg:col-span-2">
+                  No content rules yet.
+                </div>
+              )}
+            </div>
+          </section>
+
+          <div className="w-full h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+
+          <section className="flex flex-col gap-space-sm lg:gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-space-xs">
+                <Icon name="troubleshoot" className="text-[18px] text-tertiary" />
+                <h2 className="font-title text-title lg:text-headline-sm lg:font-headline-sm text-on-surface">
+                  Failure Analysis Engine
+                </h2>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-code text-label-sm">
+                Self-Correcting
+              </span>
+            </div>
+            <div className="p-4 lg:p-6 rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-3 lg:max-w-3xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-error animate-ping" />
+                  <span className="font-code text-label-sm text-error font-medium">
+                    Incident #89 Self-Correction
+                  </span>
+                </div>
+                <span className="font-code text-[11px] text-on-surface-variant">2h ago</span>
+              </div>
+              <p className="font-body-sm text-body-sm text-on-surface">
+                Script #89 underperformed because product demo was shown without establishing pain
+                point first. Auto-guardrail applied to generator prompts.
+              </p>
+              <RetentionCurveChart />
+              <div className="flex items-center gap-2 pt-1">
+                <Icon name="auto_mode" className="text-[16px] text-primary" />
+                <span className="font-code text-label-sm text-primary">
+                  Rule patch v4.8 deployed across all active nodes
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section className="flex flex-col lg:flex-row gap-2.5 lg:gap-3 pt-space-xs pb-space-lg lg:pb-2 lg:max-w-2xl">
+            <button className="w-full lg:flex-1 py-3 px-4 rounded-xl bg-primary text-on-primary font-title text-[14px] flex items-center justify-center gap-2 shadow-md lg:hover:bg-primary/90 transition-colors">
+              <Icon name="mic" className="text-[18px]" />
+              <span>Sync New Customer Call Recording</span>
+            </button>
+            <button className="w-full lg:flex-1 py-3 px-4 rounded-xl bg-surface-container-high text-on-surface font-title text-[14px] flex items-center justify-center gap-2 lg:hover:bg-surface-container-highest transition-colors">
+              <Icon name="edit_note" className="text-[18px]" />
+              <span>Update Rulebook</span>
+            </button>
+            <button className="w-full lg:flex-1 py-3 px-4 rounded-xl bg-surface-container text-primary font-title text-[14px] flex items-center justify-center gap-2 lg:hover:bg-surface-container-high transition-colors">
+              <Icon name="offline_bolt" className="text-[18px]" />
+              <span>Run Intelligence Audit</span>
+            </button>
+          </section>
+        </div>
+      )}
     </PageContainer>
   )
 }

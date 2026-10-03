@@ -1,22 +1,24 @@
 import { Icon } from '../../ui/Icon'
-import type { PendingApproval } from '../../../types'
+import type { ApprovalView } from '../../../api/products'
 
-const TARGET_TYPE_LABEL: Record<PendingApproval['targetType'], string> = {
+const TARGET_TYPE_LABEL: Record<ApprovalView['targetType'], string> = {
   product: 'Product',
   grid_template: 'Grid Template',
   inspiration: 'Inspiration Item',
 }
 
 interface PendingApprovalsPanelProps {
-  approvals: PendingApproval[]
-  onApprove: (approval: PendingApproval) => void
-  onReject: (approval: PendingApproval) => void
+  approvals: ApprovalView[]
+  onApprove: (approval: ApprovalView) => void
+  onReject: (approval: ApprovalView) => void
+  isAdmin: boolean
 }
 
 /** Admin-approval gate for permanent-knowledge deletion. Nothing removed
  * from Products, Grid Templates, or Inspiration in the Content Hub is
- * actually deleted until it's approved here. */
-export function PendingApprovalsPanel({ approvals, onApprove, onReject }: PendingApprovalsPanelProps) {
+ * actually deleted until it's approved here — only an admin can resolve
+ * it; everyone else just sees what's pending. */
+export function PendingApprovalsPanel({ approvals, onApprove, onReject, isAdmin }: PendingApprovalsPanelProps) {
   if (approvals.length === 0) return null
 
   return (
@@ -47,22 +49,28 @@ export function PendingApprovalsPanel({ approvals, onApprove, onReject }: Pendin
                 Delete request · {TARGET_TYPE_LABEL[approval.targetType]}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => onReject(approval)}
-                className="px-2.5 py-1.5 rounded-lg bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-semibold"
-              >
-                Reject
-              </button>
-              <button
-                type="button"
-                onClick={() => onApprove(approval)}
-                className="px-2.5 py-1.5 rounded-lg bg-error text-on-error font-label-sm text-label-sm font-semibold"
-              >
-                Approve Delete
-              </button>
-            </div>
+            {isAdmin ? (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onReject(approval)}
+                  className="px-2.5 py-1.5 rounded-lg bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-semibold"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onApprove(approval)}
+                  className="px-2.5 py-1.5 rounded-lg bg-error text-on-error font-label-sm text-label-sm font-semibold"
+                >
+                  Approve Delete
+                </button>
+              </div>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px] font-semibold shrink-0">
+                Awaiting admin
+              </span>
+            )}
           </div>
         ))}
       </div>
