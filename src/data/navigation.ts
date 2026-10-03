@@ -13,6 +13,5 @@ export const navItems: NavItem[] = [
   { path: '/hub', label: 'Hub', sidebarLabel: 'Content Hub', icon: 'inventory_2' },
   { path: '/plan', label: 'Plan', sidebarLabel: 'Plan', icon: 'account_tree' },
   { path: '/intelligence', label: 'Intel', sidebarLabel: 'Intelligence', icon: 'psychology' },
-  { path: '/video-blueprint', label: 'Blueprint', sidebarLabel: 'Video Blueprint', icon: 'video_settings' },
   { path: '/settings', label: 'Settings', icon: 'tune' },
 ]

@@ -11,7 +11,6 @@ const PAGE_LABELS: Record<string, string> = {
   '/hub': 'Content Hub',
   '/plan': 'Plan',
   '/intelligence': 'Intelligence Hub',
-  '/video-blueprint': 'Video Blueprint',
   '/settings': 'Settings',
 }
 
