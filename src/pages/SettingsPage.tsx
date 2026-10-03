@@ -4,6 +4,7 @@ import { Tooltip } from '../components/ui/Tooltip'
 import { PageContainer } from '../components/layout/PageContainer'
 import { SettingsToggleRow } from '../components/shared/SettingsToggleRow'
 import { usePersistentState } from '../hooks/usePersistentState'
+import { useAuth } from '../hooks/useAuth'
 import {
   notificationSettings,
   brandRuleSettings,
@@ -19,6 +20,7 @@ import type { ViralitySettings } from '../types'
  * tokens/components 1:1 rather than converted from Stitch markup.
  */
 export function SettingsPage() {
+  const { user, logout } = useAuth()
   const [notifications, setNotifications] = useState(() =>
     Object.fromEntries(notificationSettings.map((item) => [item.id, item.enabled])),
   )
@@ -42,19 +44,19 @@ export function SettingsPage() {
       </section>
 
       <section className="bg-surface-container-lowest rounded-xl p-space-md lg:p-6 shadow-sm flex items-center gap-3">
-        <div className="w-14 h-14 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-headline-sm text-headline-sm font-semibold shrink-0">
-          {workspaceInfo.name.charAt(0)}
+        <div className="w-14 h-14 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-headline-sm text-headline-sm font-semibold shrink-0 uppercase">
+          {(user?.username ?? workspaceInfo.name).charAt(0)}
         </div>
         <div className="flex flex-col min-w-0">
-          <span className="font-title text-title text-on-surface truncate">
-            {workspaceInfo.name}
+          <span className="font-title text-title text-on-surface truncate capitalize">
+            {user?.username ?? workspaceInfo.name}
           </span>
           <span className="font-body-sm text-body-sm text-on-surface-variant truncate">
             {workspaceInfo.email}
           </span>
           <div className="flex items-center gap-2 mt-1">
-            <span className="px-2 py-0.5 rounded-full bg-surface-container text-primary font-label-sm text-label-sm font-semibold">
-              {workspaceInfo.plan}
+            <span className="px-2 py-0.5 rounded-full bg-surface-container text-primary font-label-sm text-label-sm font-semibold uppercase">
+              {user?.role ?? workspaceInfo.plan}
             </span>
             <span className="font-label-sm text-label-sm text-on-surface-variant">
               {workspaceInfo.seats}
@@ -101,6 +103,7 @@ export function SettingsPage() {
         </div>
       </section>
 
+      {user?.role === 'admin' && (
       <section className="flex flex-col gap-space-sm">
         <div className="flex items-center gap-space-xs">
           <Icon name="admin_panel_settings" className="text-[18px] text-primary" />
@@ -140,6 +143,7 @@ export function SettingsPage() {
           </p>
         </div>
       </section>
+      )}
 
       <section className="flex flex-col gap-space-sm">
         <div className="flex items-center gap-space-xs">
@@ -182,7 +186,11 @@ export function SettingsPage() {
           <Icon name="download" className="text-[18px]" />
           <span>Export Account Data</span>
         </button>
-        <button className="w-full py-3 px-4 rounded-xl bg-error-container text-on-error-container font-title text-[14px] flex items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={logout}
+          className="w-full py-3 px-4 rounded-xl bg-error-container text-on-error-container font-title text-[14px] flex items-center justify-center gap-2"
+        >
           <Icon name="logout" className="text-[18px]" />
           <span>Sign Out</span>
         </button>

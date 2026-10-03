@@ -395,3 +395,15 @@ export interface ViralitySettings {
   /** e.g. 50000 — the metric value that counts as "viral" */
   threshold: number
 }
+
+// ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
+
+export type UserRole = 'admin' | 'user'
+
+export interface AuthUser {
+  username: string
+  role: UserRole
+}
+

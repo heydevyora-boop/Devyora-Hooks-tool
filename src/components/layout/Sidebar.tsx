@@ -1,12 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import { Icon } from '../ui/Icon'
 import { navItems } from '../../data/navigation'
-
-const LOGO_URL =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuDOEBaCT22FBE_8keaaVa-o5oSbO1fGds3AMJhGCFowV4C7PcgBc6yk_okJyXrRFloTWUjLzP_XqMfEYjgnUZxtCI3WHUqNdaYC_p28jb4yu6DLYVWw_QpL8FJXl_S8816sTzsO-P4N1uWit6U-ZISRFRtN3gIPb37XzLhJd78pmRfaUcGfCRRdbS5Fy_eMoq_gEHXBLXaQfwD-1fhrCtLAlDKVee49dPGF1aSzqRFwAfmIlOAdQrzr-Q'
-
-const AVATAR_URL =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuAR0Pco1HYVCHyxkMPaNknj7xQuhsFegAFdT2BIhS3C85zy7yJa8FoPgmH_P1WtQP3u7Zl4N6X8icvqlI2c3uphMn4i7pQ81OqvvTnEzR85jo_Myr0_1WYRYdhEeFbodqw7FJbi_HSzrJyGtkbRfNohsfXBW4Z7pBbtK7U1YQIUtELgEh8uG_GXuqSgapDUy0ZF4RccUxHWNrDD5M57Ruf6FqgaZ8w_54NpFB0-Z2iCah6aVUOfTzVoZw'
+import { LOGO_URL, AVATAR_URL } from '../../data/brand'
+import { useAuth } from '../../hooks/useAuth'
 
 interface SidebarProps {
   collapsed: boolean
@@ -14,6 +10,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const { user, logout } = useAuth()
   const primaryAction = navItems.find((item) => item.isPrimaryAction)
   const restItems = navItems.filter((item) => !item.isPrimaryAction)
 
@@ -105,14 +102,24 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-surface" />
           </div>
           {!collapsed && (
-            <div className="flex flex-col min-w-0">
-              <span className="font-label-md text-label-md text-on-surface font-semibold truncate">
-                Sarah Chen
-              </span>
-              <span className="font-label-sm text-[11px] text-on-surface-variant truncate">
-                sarah@devyora.com
-              </span>
-            </div>
+            <>
+              <div className="flex flex-col min-w-0 flex-1">
+                <span className="font-label-md text-label-md text-on-surface font-semibold truncate">
+                  {user?.username ?? 'Guest'}
+                </span>
+                <span className="font-label-sm text-[11px] text-on-surface-variant uppercase tracking-wide truncate">
+                  {user?.role ?? '—'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={logout}
+                title="Sign out"
+                className="shrink-0 w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors flex items-center justify-center"
+              >
+                <Icon name="logout" className="text-[16px]" />
+              </button>
+            </>
           )}
         </div>
       </div>
