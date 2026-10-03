@@ -1,15 +1,21 @@
-# Devyora Hooks — Backend (Chunk 4)
+# Devyora Hooks — Backend (Chunk 5)
 
 Foundational backend implementing the architecture designed in Chunks 1–2
 (`BACKEND_REQUIREMENTS_MAP.md`, `BACKEND_BLUEPRINT_CHUNK2.md`). Chunk 3
 built the foundation — Users/Roles, Products ("Product Knowledge"), Brand
 information, Sources, Uploaded files, Historical Content, Content
-performance. Chunk 4 (this revision) adds Content Intelligence and
-Planning on top of that foundation, without rebuilding it: authorized
+performance. Chunk 4 added Content Intelligence and Planning — authorized
 Instagram integration, Inspiration, Content Grids, a Knowledge Base
 aggregator + cross-entity search, admin-gated deletion approvals, Content
 Strategy, the Content Flowchart ("Content Plan"), and the Content Gap
-Engine. Advanced AI generation is still out of scope.
+Engine. Chunk 5 (this revision) adds AI Content Generation on top of all
+of that, without rebuilding it: a context-aware, rule-based generator
+(topic/hook/angle/script/scenes/visual direction/b-roll/CTA/caption),
+versioned regeneration with a kept history, a Video Blueprint scoring
+service, a content-similarity check against Historical Content, an
+admin-configurable virality threshold, and a Draft→Generated→Review→
+Approved→Published→Archived approval pipeline — and it's wired into the
+existing frontend's Create Script and Video Blueprint UI.
 
 ## Stack
 
@@ -35,6 +41,24 @@ tokens are encrypted at rest with AES-256-GCM (`ENCRYPTION_KEY`, see
 Historical Content system, never kept as a second, parallel store of
 "what was published."
 
+**AI Content Generation is a deterministic, rule-based generator — not a
+call to a real language model.** It's a direct backend port of the
+frontend's own former client-side placeholder (`generateScriptContent.ts`),
+now driven by real stored context (Product Knowledge, Brand Rules,
+Inspiration, the active Content Grid, Content Strategy, the Flowchart node
+it was generated from, and the user's own instructions) instead of
+client-held state. The Video Blueprint score (Virality Potential, Hook
+Strength, Specificity, Brand Fit, Generic-AI detection, etc.) is computed
+from real, inspectable signals in the generated text itself — word counts,
+banned-phrase hits, numeric/proper-noun density, CTA verbs — and is always
+an analytical estimate, never presented as a guaranteed prediction. The
+content-similarity check is a Jaccard word-overlap comparison against this
+workspace's real Historical Content and prior generations; it reduces
+repetition, it does not guarantee uniqueness. See
+`src/services/generationContent.builder.ts`,
+`src/services/videoBlueprint.service.ts`, and
+`src/services/similarity.service.ts`.
+
 ## Setup
 
 ```bash
@@ -45,9 +69,8 @@ npm run prisma:seed      # creates the demo workspace + admin/user accounts
 npm run dev               # starts the API on :4000 with auto-reload
 ```
 
-Demo accounts (match the existing frontend's `authService.ts` exactly, so
-the real login screen works against this backend with zero frontend
-changes once it's wired up):
+Demo accounts (the frontend's login screen calls this backend for real as
+of Chunk 5 — see "Frontend wiring" below):
 
 | username | password | role  |
 |----------|----------|-------|
@@ -113,8 +136,15 @@ All routes under `/api/v1`, session-cookie auth unless noted.
 - **Content Strategy**: `GET/POST /strategies`, `GET/PATCH /strategies/:id`
 - **Content Flowchart** (= Content Plan): `POST /strategies/:id/flowchart`, `GET /strategies/:id/flowchart`, `GET /flowcharts/:id`, `PATCH /flowcharts/:id/nodes/:nodeId`, `POST /flowcharts/:id/approve`
 
+**Chunk 5 — AI content generation**
+- **Generations**: `GET/POST /generations` (`?stage=` to filter the list), `GET /generations/:id`, `GET /generations/by-node/:nodeId`
+- **Regeneration & versions**: `POST /generations/:id/regenerate` (typed or dictated `reasonOrigin`), `GET /generations/:id/versions` (every prior version kept, never overwritten)
+- **Video Blueprint**: `GET /generations/:id/video-blueprint`
+- **Approval pipeline**: `POST /generations/:id/approve`, `POST /generations/:id/reject`, `POST /generations/:id/save` (publishes — creates a real `ContentHistory` row with `source: GENERATED`, "Approved content entering historical Content Intelligence")
+- **Virality config**: `GET /virality-config` (any authenticated user), `PATCH /virality-config` (admin only)
+
 Every list endpoint supports `?limit=&cursor=` cursor pagination. Every
-error response is `{ error: { code, message, fields? } }` — Chunk 4 adds
+error response is `{ error: { code, message, fields? } }` — Chunk 4 added
 one error code, `NOT_CONFIGURED` (501), for a real integration whose
 credentials aren't set in this environment.
 
@@ -127,10 +157,27 @@ request). Only an admin can resolve it via `/approvals/:id/approve` (which
 performs the real deletion) or `/approvals/:id/reject` (leaves the target
 untouched). See `src/services/approval.service.ts`.
 
+## Frontend wiring (Chunk 5)
+
+The existing frontend's **Create Script** page and **Video Blueprint**
+tab, and the approval-gated **Script Generation** page (`/script/:nodeId`,
+opened from an approved Content Flowchart node), now call this backend for
+real — see `src/api/client.ts`, `src/api/generation.ts`,
+`src/api/virality.ts`, and `src/api/products.ts` in the frontend repo.
+Login/logout were swapped from the frontend's mock `authService` to the
+real `/auth/login` + `/auth/logout` (a prerequisite — the generation
+endpoints need a real session cookie), exactly as that file's own
+pre-existing comment anticipated. Content Hub, Plan/Strategy/Flowchart,
+and Settings' non-virality sections are still local-only/mock — out of
+this chunk's scope — so a generation started from `/create` does a
+best-effort lookup of a real backend Product by name
+(`findProductIdByName`) rather than assuming Content Hub's local product
+list is backed by real rows.
+
 ## Known gaps / next-chunk work
 
 - No real S3 provider yet (`StorageProvider` interface is ready for one — see `src/services/storage.service.ts`)
 - No source content extraction (OCR/transcription) — explicitly deferred
 - Instagram's OAuth token exchange and media sync call the real Graph API and can't be exercised in tests without live app credentials — see `tests/instagram.test.ts` for what is covered (status, honest "not configured" behavior, disconnect)
-- Frontend is not yet wired to call this backend (that's a frontend-side change, out of scope for a backend chunk) — see `BACKEND_BLUEPRINT_CHUNK2.md` §10 for the exact contract each frontend type maps to
-- Advanced AI generation (script/content generation) is still out of scope
+- Content Hub, Plan (Strategy/Flowchart generation UI), and Product Knowledge CRUD are still frontend-local/mock — not yet wired to this backend
+- No real generative-AI model is called anywhere — generation and scoring are both deterministic and rule-based by design (see above)

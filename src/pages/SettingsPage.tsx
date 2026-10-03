@@ -3,16 +3,9 @@ import { Icon } from '../components/ui/Icon'
 import { Tooltip } from '../components/ui/Tooltip'
 import { PageContainer } from '../components/layout/PageContainer'
 import { SettingsToggleRow } from '../components/shared/SettingsToggleRow'
-import { usePersistentState } from '../hooks/usePersistentState'
 import { useAuth } from '../hooks/useAuth'
-import {
-  notificationSettings,
-  brandRuleSettings,
-  integrationSettings,
-  workspaceInfo,
-  defaultViralitySettings,
-} from '../data/mockSettings'
-import type { ViralitySettings } from '../types'
+import { useViralityConfig } from '../hooks/useViralityConfig'
+import { notificationSettings, brandRuleSettings, integrationSettings, workspaceInfo } from '../data/mockSettings'
 
 /**
  * The Stitch export did not include a Settings screen (only the bottom-nav
@@ -27,10 +20,7 @@ export function SettingsPage() {
   const [brandRules, setBrandRules] = useState(() =>
     Object.fromEntries(brandRuleSettings.map((item) => [item.id, item.enabled])),
   )
-  const [viralitySettings, setViralitySettings] = usePersistentState<ViralitySettings>(
-    'devyora-virality-settings',
-    defaultViralitySettings,
-  )
+  const { settings: viralitySettings, save: saveViralitySettings } = useViralityConfig()
 
   return (
     <PageContainer narrow className="flex flex-col space-y-space-md lg:space-y-6 pb-space-lg lg:pb-12 py-space-md lg:py-8">
@@ -129,17 +119,17 @@ export function SettingsPage() {
               step={1000}
               value={viralitySettings.threshold}
               onChange={(event) =>
-                setViralitySettings((prev) => ({
-                  ...prev,
+                saveViralitySettings({
+                  ...viralitySettings,
                   threshold: Math.max(0, Number(event.target.value) || 0),
-                }))
+                })
               }
               className="w-full bg-surface-container-lowest rounded-lg p-2 font-code text-label-md text-on-surface outline-none"
             />
           </div>
           <p className="font-label-sm text-[11px] text-on-surface-variant">
-            No live analytics backend is connected yet — this only sets the threshold used to
-            label future scores once real performance data is wired up.
+            This is a labeling threshold your team defines, not a performance guarantee — every
+            Virality Potential score in the app is measured against it.
           </p>
         </div>
       </section>

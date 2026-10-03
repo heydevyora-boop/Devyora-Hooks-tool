@@ -47,6 +47,8 @@ model Workspace {
   pendingApprovals    PendingApproval[]
   contentStrategies   ContentStrategy[]
   contentFlowcharts   ContentFlowchart[]
+  generatedContent    GeneratedContent[]
+  viralityConfig      ViralityConfig?
 
   @@map("workspaces")
 }
@@ -70,19 +72,25 @@ model User {
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   sessions            Session[]
-  createdProducts     Product[]             @relation("ProductCreatedBy")
-  uploadedMedia       MediaAsset[]          @relation("MediaUploadedBy")
-  addedSources        ContentSource[]       @relation("SourceAddedBy")
-  createdHistory      ContentHistory[]      @relation("HistoryCreatedBy")
-  connectedInstagram  InstagramConnection[] @relation("InstagramConnectedBy")
-  savedInspiration    InspirationItem[]     @relation("InspirationSavedBy")
-  createdGrids        GridTemplate[]        @relation("GridCreatedBy")
-  activatedGrids      WorkspaceActiveGrid[] @relation("GridSetBy")
-  createdRules        ContentRule[]         @relation("RuleCreatedBy")
-  requestedApprovals  PendingApproval[]     @relation("ApprovalRequestedBy")
-  resolvedApprovals   PendingApproval[]     @relation("ApprovalResolvedBy")
-  generatedStrategies ContentStrategy[]     @relation("StrategyGeneratedBy")
-  approvedFlowcharts  ContentFlowchart[]    @relation("FlowchartApprovedBy")
+  createdProducts     Product[]                 @relation("ProductCreatedBy")
+  uploadedMedia       MediaAsset[]              @relation("MediaUploadedBy")
+  addedSources        ContentSource[]           @relation("SourceAddedBy")
+  createdHistory      ContentHistory[]          @relation("HistoryCreatedBy")
+  connectedInstagram  InstagramConnection[]     @relation("InstagramConnectedBy")
+  savedInspiration    InspirationItem[]         @relation("InspirationSavedBy")
+  createdGrids        GridTemplate[]            @relation("GridCreatedBy")
+  activatedGrids      WorkspaceActiveGrid[]     @relation("GridSetBy")
+  createdRules        ContentRule[]             @relation("RuleCreatedBy")
+  requestedApprovals  PendingApproval[]         @relation("ApprovalRequestedBy")
+  resolvedApprovals   PendingApproval[]         @relation("ApprovalResolvedBy")
+  generatedStrategies ContentStrategy[]         @relation("StrategyGeneratedBy")
+  approvedFlowcharts  ContentFlowchart[]        @relation("FlowchartApprovedBy")
+  generatedContent    GeneratedContent[]        @relation("GeneratedContentGeneratedBy")
+  rejectedContent     GeneratedContent[]        @relation("GeneratedContentRejectedBy")
+  approvedContent     GeneratedContent[]        @relation("GeneratedContentApprovedBy")
+  publishedContent    GeneratedContent[]        @relation("GeneratedContentPublishedBy")
+  generatedVersions   GeneratedContentVersion[] @relation("GeneratedContentVersionCreatedBy")
+  viralityConfigEdits ViralityConfig[]          @relation("ViralityConfigUpdatedBy")
 
   @@unique([workspaceId, username])
   @@index([workspaceId])
@@ -155,6 +163,7 @@ model Product {
   strategySequenceSlots StrategySequenceSlot[]
   flowchartNodes        FlowchartNode[]
   strategyProducts      StrategyProduct[]
+  generatedContent      GeneratedContent[]
 
   @@index([workspaceId])
   @@index([workspaceId, name])
@@ -297,6 +306,7 @@ model ContentHistory {
 
   performanceSnapshots ContentPerformance[]
   instagramPost        InstagramPost?
+  generatedFrom        GeneratedContent?
 
   @@index([workspaceId])
   @@index([workspaceId, productId])
@@ -587,9 +597,10 @@ model ContentStrategy {
   generatedByUser      User?          @relation("StrategyGeneratedBy", fields: [generatedBy], references: [id], onDelete: SetNull)
   generatedAt          DateTime       @default(now()) @map("generated_at")
 
-  products  StrategyProduct[]
-  sequence  StrategySequenceSlot[]
-  flowchart ContentFlowchart?
+  products         StrategyProduct[]
+  sequence         StrategySequenceSlot[]
+  flowchart        ContentFlowchart?
+  generatedContent GeneratedContent[]
 
   @@index([workspaceId])
   @@index([workspaceId, status])
@@ -702,8 +713,9 @@ model FlowchartNode {
   strategySequenceSlotId String?               @unique @map("strategy_sequence_slot_id")
   strategySequenceSlot   StrategySequenceSlot? @relation(fields: [strategySequenceSlotId], references: [id], onDelete: SetNull)
 
-  outgoingEdges FlowchartEdge[] @relation("EdgeFrom")
-  incomingEdges FlowchartEdge[] @relation("EdgeTo")
+  outgoingEdges    FlowchartEdge[]   @relation("EdgeFrom")
+  incomingEdges    FlowchartEdge[]   @relation("EdgeTo")
+  generatedContent GeneratedContent?
 
   @@index([flowchartId])
   @@map("flowchart_nodes")
@@ -721,4 +733,200 @@ model FlowchartEdge {
 
   @@index([flowchartId])
   @@map("flowchart_edges")
+}
+
+// ---------------------------------------------------------------------------
+// AI Content Generation (Chunk 5)
+// ---------------------------------------------------------------------------
+
+/// Draft -> Generated -> Review -> Approved -> Published -> Archived.
+/// DRAFT is reserved for a future "save the brief before generating" flow —
+/// every row created by the current generate action starts at GENERATED,
+/// since generation and persistence happen together. PUBLISHED is the
+/// point at which this enters the Historical Content system for real (see
+/// GeneratedContent.contentHistoryId).
+enum ApprovalStage {
+  DRAFT
+  GENERATED
+  REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Mirrors ContentSource's text/speech origin distinction for a
+/// regeneration's typed-vs-dictated reason.
+enum RegenerationReasonOrigin {
+  TEXT
+  SPEECH
+}
+
+/// The stable identity of one generated piece of content — context links,
+/// lifecycle stage, and approval audit trail live here. The actual
+/// creative output (hook/script/scenes/caption/etc) lives on
+/// GeneratedContentVersion, never here, so regenerating never mutates
+/// history — it only ever adds a new version row.
+model GeneratedContent {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  /// Set when generated from an approved Content Flowchart node (the
+  /// "strategic" path) — @unique because a node produces at most one
+  /// generated item. Null for an ad-hoc generation started directly from
+  /// Create Script Studio, outside of any plan.
+  flowchartNodeId String?          @unique @map("flowchart_node_id")
+  flowchartNode   FlowchartNode?   @relation(fields: [flowchartNodeId], references: [id], onDelete: SetNull)
+  strategyId      String?          @map("strategy_id")
+  strategy        ContentStrategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  productId       String?          @map("product_id")
+  product         Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  platform     String  @default("instagram")
+  topic        String  @db.Text
+  gridPosition Int?    @map("grid_position")
+  dateLabel    String? @map("date_label")
+
+  /// User-provided generation brief — real input, surfaced back so it's
+  /// clear what the generator was actually asked for.
+  userInstructions   String? @map("user_instructions") @db.Text
+  /// Which real context sources were actually available and used for this
+  /// generation (e.g. ["product","historical_content","grid"]) — never a
+  /// fixed list, always what was genuinely found for this workspace.
+  contextSourcesUsed Json    @default("[]") @map("context_sources_used")
+
+  stage ApprovalStage @default(GENERATED)
+
+  rejectionReason String?   @map("rejection_reason") @db.Text
+  rejectedBy      String?   @map("rejected_by")
+  rejectedByUser  User?     @relation("GeneratedContentRejectedBy", fields: [rejectedBy], references: [id], onDelete: SetNull)
+  rejectedAt      DateTime? @map("rejected_at")
+
+  approvedBy     String?   @map("approved_by")
+  approvedByUser User?     @relation("GeneratedContentApprovedBy", fields: [approvedBy], references: [id], onDelete: SetNull)
+  approvedAt     DateTime? @map("approved_at")
+
+  publishedBy      String?         @map("published_by")
+  publishedByUser  User?           @relation("GeneratedContentPublishedBy", fields: [publishedBy], references: [id], onDelete: SetNull)
+  publishedAt      DateTime?       @map("published_at")
+  /// Set at publish time — the ContentHistory row this content became.
+  /// "Approved content should enter historical Content Intelligence."
+  contentHistoryId String?         @unique @map("content_history_id")
+  contentHistory   ContentHistory? @relation(fields: [contentHistoryId], references: [id], onDelete: SetNull)
+
+  generatedBy     String?  @map("generated_by")
+  generatedByUser User?    @relation("GeneratedContentGeneratedBy", fields: [generatedBy], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  versions GeneratedContentVersion[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, stage])
+  @@map("generated_content")
+}
+
+/// One row per generation or regeneration — the actual creative output,
+/// never overwritten. "Keep previous versions" per the Chunk 5 instructions
+/// means literally: this table only ever gets new rows, never updates.
+model GeneratedContentVersion {
+  id                 String                    @id @default(uuid())
+  generatedContentId String                    @map("generated_content_id")
+  generatedContent   GeneratedContent          @relation(fields: [generatedContentId], references: [id], onDelete: Cascade)
+  version            Int
+  parentVersionId    String?                   @map("parent_version_id")
+  parentVersion      GeneratedContentVersion?  @relation("VersionParent", fields: [parentVersionId], references: [id], onDelete: SetNull)
+  childVersions      GeneratedContentVersion[] @relation("VersionParent")
+
+  /// The selected hook's text/angle, denormalized from `hooks` for direct
+  /// querying (e.g. by the similarity service) without parsing JSON.
+  hook   String @db.Text
+  angle  String
+  /// Synthesized from the scene dialogue — a real derivation of `scenes`,
+  /// not a separately-authored field.
+  script String @db.Text
+
+  /// HookVariation[] — all offered hook options, one marked selected.
+  hooks           Json   @default("[]")
+  /// DirectorScene[]
+  scenes          Json   @default("[]")
+  /// VisualDirectionBeat[]
+  visualDirection Json   @default("[]") @map("visual_direction")
+  /// BRollShot[]
+  brollPlan       Json   @default("[]") @map("broll_plan")
+  /// string[]
+  onScreenText    Json   @default("[]") @map("on_screen_text")
+  cta             String @db.Text
+  caption         String @db.Text
+
+  /// Real, non-guaranteed overlap findings against Historical Content and
+  /// other generated content in this workspace — see similarity.service.ts.
+  similarityWarnings Json @default("[]") @map("similarity_warnings")
+
+  /// Set only on a version produced by regeneration (version > 1).
+  regenerationReason       String?                   @map("regeneration_reason") @db.Text
+  regenerationReasonOrigin RegenerationReasonOrigin? @map("regeneration_reason_origin")
+  regenerationTarget       String?                   @map("regeneration_target")
+
+  createdBy     String?  @map("created_by")
+  createdByUser User?    @relation("GeneratedContentVersionCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  blueprintScore VideoBlueprintScore?
+
+  @@unique([generatedContentId, version])
+  @@index([generatedContentId])
+  @@map("generated_content_versions")
+}
+
+/// Analytical assessment of one version's content, computed at
+/// generation/regeneration time — NEVER a guaranteed prediction of future
+/// performance. See video_blueprint.service.ts for how each score is
+/// derived from real, inspectable signals.
+model VideoBlueprintScore {
+  id                        String                  @id @default(uuid())
+  generatedContentVersionId String                  @unique @map("generated_content_version_id")
+  generatedContentVersion   GeneratedContentVersion @relation(fields: [generatedContentVersionId], references: [id], onDelete: Cascade)
+
+  viralityPotential Int    @map("virality_potential")
+  tierLabel         String @map("tier_label")
+  tierBadge         String @map("tier_badge")
+  diagnosis         String @db.Text
+
+  hookStrength       Int @map("hook_strength")
+  retentionPotential Int @map("retention_potential")
+  specificity        Int
+  authority          Int
+  brandFit           Int @map("brand_fit")
+  naturalSpeech      Int @map("natural_speech")
+  ctaClarity         Int @map("cta_clarity")
+  visualPotential    Int @map("visual_potential")
+  /// Higher = cleaner / less generic-AI-sounding (matches the frontend's
+  /// existing "Generic AI ... Clean" convention).
+  genericAiScore     Int @map("generic_ai_score")
+
+  /// The ViralityConfig values in effect when this was scored, snapshotted
+  /// so an old score is never silently reinterpreted under a later
+  /// threshold change.
+  viralityMetricLabel String @map("virality_metric_label")
+  viralityThreshold   Int    @map("virality_threshold")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("video_blueprint_scores")
+}
+
+/// Admin-configurable definition of "viral" for this workspace — one row
+/// per workspace, matching the frontend's ViralitySettings type exactly.
+/// Never represented as a guaranteed prediction, only a labeling threshold.
+model ViralityConfig {
+  workspaceId   String    @id @map("workspace_id")
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  metricLabel   String    @default("Organic Views") @map("metric_label")
+  threshold     Int       @default(50000)
+  updatedBy     String?   @map("updated_by")
+  updatedByUser User?     @relation("ViralityConfigUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("virality_configs")
 }

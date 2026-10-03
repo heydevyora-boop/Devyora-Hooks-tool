@@ -5,7 +5,7 @@ import type { BRollShot } from '../../../types'
 
 interface BRollPlanListProps {
   shots: BRollShot[]
-  onRegenerate: (feedback: string) => void
+  onRegenerate: (feedback: string, origin: 'text' | 'speech') => void
 }
 
 /** The practical shot list a creator can follow without re-reading the script. */

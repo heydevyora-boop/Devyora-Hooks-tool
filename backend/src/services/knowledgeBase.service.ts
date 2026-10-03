@@ -67,29 +67,35 @@ export async function search(workspaceId: string, q: string, limit: number) {
   const [products, historyItems, inspirationItems, gridTemplates, contentRules, sources] = await Promise.all([
     prisma.product.findMany({
       where: { workspaceId, OR: [{ name: insensitive }, { description: insensitive }] },
+      orderBy: { createdAt: 'desc' },
       take: limit,
     }),
     prisma.contentHistory.findMany({
       where: { workspaceId, OR: [{ title: insensitive }, { topic: insensitive }, { hook: insensitive }] },
       include: { product: true },
+      orderBy: { publishedDate: 'desc' },
       take: limit,
     }),
     prisma.inspirationItem.findMany({
       where: { workspaceId, notes: insensitive },
       include: { contentSource: true },
+      orderBy: { savedAt: 'desc' },
       take: limit,
     }),
     prisma.gridTemplate.findMany({
       where: { workspaceId, OR: [{ name: insensitive }, { description: insensitive }] },
       include: { slots: { include: { product: true } } },
+      orderBy: { createdAt: 'desc' },
       take: limit,
     }),
     prisma.contentRule.findMany({
       where: { workspaceId, OR: [{ title: insensitive }, { description: insensitive }, { category: insensitive }] },
+      orderBy: { createdAt: 'desc' },
       take: limit,
     }),
     prisma.contentSource.findMany({
       where: { workspaceId, OR: [{ title: insensitive }, { value: insensitive }] },
+      orderBy: { addedAt: 'desc' },
       take: limit,
     }),
   ])

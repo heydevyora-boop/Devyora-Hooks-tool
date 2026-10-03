@@ -1,35 +1,28 @@
+import { api, ApiError } from '../api/client'
 import type { AuthUser } from '../types'
 
 /**
- * There is no backend yet — this is a frontend placeholder standing in for
- * a real authentication API, following the same "clearly marked mock, never
- * presented as live" pattern used for script generation elsewhere in this
- * app (see generateScriptContent.ts).
- *
- * IMPORTANT — NOT PRODUCTION SECURITY:
- * Credentials checked here ship in the client bundle and are trivially
- * readable by anyone. This is fine for wiring up the login UI and the
- * admin/user routing structure, but it must never be mistaken for real
- * authentication. Before production, replace `authenticate` below with a
- * call to a real backend (e.g. POST /api/auth/login) that verifies a
- * hashed password server-side and returns a session token — nothing about
- * the login form, AuthContext, or ProtectedRoute needs to change for that
- * swap, only this function's body.
+ * Real backend auth (Chunk 3's /auth/login + /auth/logout) — the session
+ * itself is an httpOnly cookie the backend sets; nothing here stores a
+ * token. `authenticate` returning null means "invalid credentials" to the
+ * caller; any other failure (network, 5xx) is rethrown so the UI can show
+ * a real error instead of silently treating it as a bad password.
  */
-const DEMO_CREDENTIALS: { username: string; password: string; role: AuthUser['role'] }[] = [
-  { username: 'admin', password: 'admin123', role: 'admin' },
-  { username: 'user', password: 'user123', role: 'user' },
-]
+export async function authenticate(username: string, password: string): Promise<AuthUser | null> {
+  try {
+    const { user } = await api.post<{ user: { username: string; role: AuthUser['role'] } }>('/auth/login', {
+      username,
+      password,
+    })
+    return { username: user.username, role: user.role }
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) return null
+    throw error
+  }
+}
 
-const MOCK_NETWORK_DELAY_MS = 700
-
-export function authenticate(username: string, password: string): Promise<AuthUser | null> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const match = DEMO_CREDENTIALS.find(
-        (credential) => credential.username === username && credential.password === password,
-      )
-      resolve(match ? { username: match.username, role: match.role } : null)
-    }, MOCK_NETWORK_DELAY_MS)
+export async function endSession(): Promise<void> {
+  await api.post('/auth/logout').catch(() => {
+    // Best-effort — the frontend clears its own session state regardless.
   })
 }

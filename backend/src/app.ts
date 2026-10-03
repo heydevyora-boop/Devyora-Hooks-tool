@@ -23,6 +23,8 @@ import { knowledgeBaseRoutes } from './routes/knowledgeBase.routes.js'
 import { gapEngineRoutes } from './routes/gapEngine.routes.js'
 import { strategyRoutes } from './routes/strategy.routes.js'
 import { flowchartRoutes } from './routes/flowchart.routes.js'
+import { generationRoutes } from './routes/generation.routes.js'
+import { viralityRoutes } from './routes/virality.routes.js'
 import { healthRoutes } from './routes/health.routes.js'
 
 export async function buildApp() {
@@ -118,6 +120,8 @@ export async function buildApp() {
   await app.register(gapEngineRoutes, { prefix: '/api/v1' })
   await app.register(strategyRoutes, { prefix: '/api/v1' })
   await app.register(flowchartRoutes, { prefix: '/api/v1' })
+  await app.register(generationRoutes, { prefix: '/api/v1' })
+  await app.register(viralityRoutes, { prefix: '/api/v1' })
 
   return app
 }

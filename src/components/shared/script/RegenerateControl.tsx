@@ -5,7 +5,9 @@ import { VoiceInputButton } from '../../ui/VoiceInputButton'
 interface RegenerateControlProps {
   /** What this control regenerates, e.g. "Hook #2" or "Scene 3" — shown in the prompt. */
   targetLabel: string
-  onRegenerate: (feedback: string) => void
+  /** `origin` reflects whether the feedback came from typing or dictation
+   * — the backend keeps this distinction (RegenerationReasonOrigin). */
+  onRegenerate: (feedback: string, origin: 'text' | 'speech') => void
   className?: string
 }
 
@@ -25,6 +27,7 @@ const EXAMPLE_PROMPTS = [
 export function RegenerateControl({ targetLabel, onRegenerate, className = '' }: RegenerateControlProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [origin, setOrigin] = useState<'text' | 'speech'>('text')
   const [examplePrompt] = useState(
     () => EXAMPLE_PROMPTS[Math.floor(Math.random() * EXAMPLE_PROMPTS.length)],
   )
@@ -50,7 +53,10 @@ export function RegenerateControl({ targetLabel, onRegenerate, className = '' }:
         </span>
         <VoiceInputButton
           label=""
-          onTranscript={(transcript) => setFeedback(transcript)}
+          onTranscript={(transcript) => {
+            setFeedback(transcript)
+            setOrigin('speech')
+          }}
         />
       </div>
       <textarea
@@ -58,7 +64,10 @@ export function RegenerateControl({ targetLabel, onRegenerate, className = '' }:
         className="w-full bg-surface-container-lowest rounded-lg p-2.5 font-body-sm text-body-sm text-on-surface outline-none min-h-[64px] resize-y"
         placeholder={`Why? e.g. "${examplePrompt}"`}
         value={feedback}
-        onChange={(event) => setFeedback(event.target.value)}
+        onChange={(event) => {
+          setFeedback(event.target.value)
+          setOrigin('text')
+        }}
       />
       <div className="flex items-center gap-2">
         <button
@@ -75,9 +84,10 @@ export function RegenerateControl({ targetLabel, onRegenerate, className = '' }:
           type="button"
           disabled={!feedback.trim()}
           onClick={() => {
-            onRegenerate(feedback.trim())
+            onRegenerate(feedback.trim(), origin)
             setIsOpen(false)
             setFeedback('')
+            setOrigin('text')
           }}
           className="flex-1 py-1.5 rounded-lg bg-primary text-on-primary font-label-sm text-label-sm font-semibold disabled:opacity-50"
         >

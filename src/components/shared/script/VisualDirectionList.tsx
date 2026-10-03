@@ -4,7 +4,7 @@ import type { VisualDirectionBeat } from '../../../types'
 
 interface VisualDirectionListProps {
   beats: VisualDirectionBeat[]
-  onRegenerate: (feedback: string) => void
+  onRegenerate: (feedback: string, origin: 'text' | 'speech') => void
 }
 
 /** WHAT needs to be shown, scene by scene — never camera settings. */

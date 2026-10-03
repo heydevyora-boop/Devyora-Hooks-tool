@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Icon } from '../components/ui/Icon'
 import { VoiceInputButton } from '../components/ui/VoiceInputButton'
@@ -6,19 +6,27 @@ import { Tooltip } from '../components/ui/Tooltip'
 import { PageContainer } from '../components/layout/PageContainer'
 import { HookVariationCard } from '../components/shared/HookVariationCard'
 import { SceneCard } from '../components/shared/SceneCard'
+import { ScoreCard } from '../components/shared/ScoreCard'
 import { VisualDirectionList } from '../components/shared/script/VisualDirectionList'
 import { BRollPlanList } from '../components/shared/script/BRollPlanList'
 import { RegenerateControl } from '../components/shared/script/RegenerateControl'
-import { generateScriptContent, regenerateWithFeedback } from '../components/shared/script/generateScriptContent'
+import {
+  generateContent,
+  getGeneration,
+  getVideoBlueprint,
+  regenerateContent,
+  approveGeneration,
+  rejectGeneration,
+  saveGeneration,
+  type GeneratedContentView,
+  type VideoBlueprintView,
+} from '../api/generation'
+import { findProductIdByName } from '../api/products'
+import { ApiError } from '../api/client'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard'
 import { seedProducts, seedContentHistory } from '../data/mockKnowledge'
-import type {
-  ContentFlowchart,
-  ProductKnowledge,
-  ContentHistoryItem,
-  GeneratedContentItem,
-} from '../types'
+import type { ContentFlowchart, ProductKnowledge, ContentHistoryItem } from '../types'
 
 export function ScriptGenerationPage() {
   const { nodeId } = useParams<{ nodeId: string }>()
@@ -32,18 +40,50 @@ export function ScriptGenerationPage() {
     'devyora-content-history',
     seedContentHistory,
   )
-  const [generatedItems, setGeneratedItems] = usePersistentState<GeneratedContentItem[]>(
-    'devyora-generated-content',
-    [],
+  // Content Hub/Plan aren't wired to the real backend yet (out of this
+  // chunk's scope) — their node/flowchart ids are frontend-only, so this
+  // just remembers which real backend generation belongs to which local
+  // node, instead of relying on a real foreign key.
+  const [generationIdByNode, setGenerationIdByNode] = usePersistentState<Record<string, string>>(
+    'devyora-generation-ids',
+    {},
   )
 
   const [instructions, setInstructions] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isWorking, setIsWorking] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [item, setItem] = useState<GeneratedContentView | null>(null)
+  const [blueprint, setBlueprint] = useState<VideoBlueprintView | null>(null)
   const { copied, copy } = useCopyToClipboard()
 
   const node = flowchart?.nodes.find((n) => n.id === nodeId && n.type === 'content')
   const isPlanApproved = Boolean(flowchart?.approvedAt)
+  const product = products.find((p) => p.name === node?.product) ?? null
+
+  useEffect(() => {
+    if (!node) return
+    const existingId = generationIdByNode[node.id]
+    if (!existingId) {
+      setItem(null)
+      setBlueprint(null)
+      return
+    }
+    getGeneration(existingId)
+      .then((generation) => {
+        setItem(generation)
+        return getVideoBlueprint(existingId)
+      })
+      .then(setBlueprint)
+      .catch(() => {
+        // The id we remembered no longer resolves (e.g. a fresh dev DB) —
+        // fall back to the pre-generation form rather than looping forever.
+        setItem(null)
+        setBlueprint(null)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node?.id])
 
   // Hard gate: no route here works without an approved plan containing
   // this exact content node. This is what keeps script generation from
@@ -74,68 +114,116 @@ export function ScriptGenerationPage() {
     )
   }
 
-  const product = products.find((p) => p.name === node.product) ?? null
-  const item = generatedItems.find((existing) => existing.flowchartNodeId === node.id)
-
-  const persistItem = (next: GeneratedContentItem) => {
-    setGeneratedItems((prev) => {
-      const exists = prev.some((existing) => existing.id === next.id)
-      return exists ? prev.map((existing) => (existing.id === next.id ? next : existing)) : [next, ...prev]
-    })
+  function describeError(err: unknown): string {
+    if (err instanceof ApiError) return err.message
+    return "Couldn't reach the server — try again in a moment."
   }
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setIsGenerating(true)
-    setTimeout(() => {
-      const generated = generateScriptContent(
-        node,
-        product,
-        flowchart.strategyId,
-        instructions.trim() || undefined,
-      )
-      persistItem(generated)
+    setError(null)
+    try {
+      const productId = await findProductIdByName(product?.name ?? node.product ?? '')
+      const generated = await generateContent({
+        productId,
+        topic: node.reason ?? node.label,
+        platform: 'instagram',
+        userInstructions: instructions.trim() || undefined,
+      })
+      setGenerationIdByNode((prev) => ({ ...prev, [node.id]: generated.id }))
+      setItem(generated)
+      setBlueprint(await getVideoBlueprint(generated.id))
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
       setIsGenerating(false)
-    }, 900)
-  }
-
-  const handleRegenerate = (targetLabel: string) => (feedback: string) => {
-    if (!item) return
-    persistItem(regenerateWithFeedback(item, targetLabel, feedback))
-  }
-
-  const handleApprove = () => {
-    if (!item) return
-    persistItem({ ...item, status: 'approved' })
-  }
-
-  const handleSaveToIntelligence = () => {
-    if (!item) return
-    const historyItem: ContentHistoryItem = {
-      id: `hist-${item.id}`,
-      title: item.topic,
-      product: item.product,
-      topic: item.topic,
-      format:
-        node.contentType === 'reel'
-          ? 'Reel'
-          : node.contentType === 'carousel'
-            ? 'Carousel'
-            : node.contentType === 'story'
-              ? 'Story'
-              : 'Static',
-      date: new Date().toISOString().slice(0, 10),
-      hook: item.hooks.find((h) => h.selected)?.text,
-      performanceLabel: undefined,
-      engagement: undefined,
-      status: 'Draft',
     }
-    setHistory((prev) => [historyItem, ...prev])
-    persistItem({ ...item, status: 'saved' })
-    setFlowchart({
-      ...flowchart,
-      nodes: flowchart.nodes.map((n) => (n.id === node.id ? { ...n, status: 'done' } : n)),
-    })
-    setJustSaved(true)
+  }
+
+  const handleRegenerate = (targetLabel: string) => async (feedback: string, origin: 'text' | 'speech') => {
+    if (!item) return
+    setIsWorking(true)
+    setError(null)
+    try {
+      const updated = await regenerateContent(item.id, { targetLabel, reason: feedback, reasonOrigin: origin })
+      setItem(updated)
+      setBlueprint(await getVideoBlueprint(item.id))
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setIsWorking(false)
+    }
+  }
+
+  const handleApprove = async () => {
+    if (!item) return
+    setIsWorking(true)
+    setError(null)
+    try {
+      setItem(await approveGeneration(item.id))
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setIsWorking(false)
+    }
+  }
+
+  const handleReject = async () => {
+    if (!item) return
+    setIsWorking(true)
+    setError(null)
+    try {
+      setItem(await rejectGeneration(item.id, 'Sent back for another pass before approving'))
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setIsWorking(false)
+    }
+  }
+
+  const handleSaveToIntelligence = async () => {
+    if (!item) return
+    setIsWorking(true)
+    setError(null)
+    try {
+      const saved = await saveGeneration(item.id)
+      setItem(saved)
+
+      // Content Hub's historical content list isn't wired to the backend
+      // yet (out of this chunk's scope) — mirror the save locally too so
+      // the existing local-only views stay consistent. The real,
+      // authoritative record is the ContentHistory row the backend just
+      // created (saved.contentHistoryId).
+      const historyItem: ContentHistoryItem = {
+        id: `hist-${saved.id}`,
+        title: saved.topic,
+        product: saved.product,
+        topic: saved.topic,
+        format:
+          node.contentType === 'reel'
+            ? 'Reel'
+            : node.contentType === 'carousel'
+              ? 'Carousel'
+              : node.contentType === 'story'
+                ? 'Story'
+                : 'Static',
+        date: new Date().toISOString().slice(0, 10),
+        hook: saved.hooks.find((h) => h.selected)?.text,
+        performanceLabel: undefined,
+        engagement: undefined,
+        status: 'Draft',
+      }
+      setHistory((prev) => [historyItem, ...prev])
+      setFlowchart({
+        ...flowchart,
+        nodes: flowchart.nodes.map((n) => (n.id === node.id ? { ...n, status: 'done' } : n)),
+      })
+      setJustSaved(true)
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setIsWorking(false)
+    }
   }
 
   return (
@@ -169,6 +257,13 @@ export function ScriptGenerationPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="mt-space-sm bg-error-container text-on-error-container rounded-lg p-3 flex items-start gap-2">
+          <Icon name="error" className="text-[18px] mt-0.5" />
+          <p className="font-body-sm text-body-sm">{error}</p>
+        </div>
+      )}
+
       {!item ? (
         <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-md mt-space-md">
           <div className="flex flex-col gap-1">
@@ -195,12 +290,40 @@ export function ScriptGenerationPage() {
             <span>{isGenerating ? 'Synthesizing Script…' : '✨ Generate Script'}</span>
           </button>
           <p className="font-label-sm text-[11px] text-on-surface-variant text-center">
-            Mock generation — no AI backend is connected yet. Output is placeholder content built
-            from your product and plan data.
+            Rule-based generation from your real product, grid, and plan context — not a language
+            model. See the Video Blueprint score below for an analytical (not guaranteed) read on
+            the result.
           </p>
         </div>
       ) : (
         <div className="flex flex-col gap-space-md mt-space-md">
+          {blueprint && (
+            <ScoreCard
+              score={blueprint.score}
+              tierLabel={blueprint.tierLabel}
+              tierBadge={blueprint.tierBadge}
+              diagnosis={blueprint.diagnosis}
+              metrics={blueprint.metrics}
+              viralityThresholdLabel={blueprint.viralityThresholdLabel}
+            />
+          )}
+
+          {item.similarityWarnings.length > 0 && (
+            <div className="bg-surface-container-high/60 rounded-lg p-2.5 flex items-start gap-2">
+              <Icon name="warning" className="text-tertiary-container text-[18px] mt-0.5" />
+              <div className="flex flex-col gap-1">
+                <span className="font-label-sm text-label-sm font-semibold text-on-surface">
+                  Similar to past content
+                </span>
+                {item.similarityWarnings.map((warning, index) => (
+                  <p key={index} className="font-body-sm text-body-sm text-on-surface-variant">
+                    {warning.message}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <h2 className="font-title text-title lg:text-headline-sm lg:font-headline-sm text-on-surface flex items-center gap-1.5">
@@ -336,18 +459,31 @@ export function ScriptGenerationPage() {
                 </p>
                 <div className="flex items-center gap-2">
                   {item.status !== 'approved' && (
-                    <button
-                      type="button"
-                      onClick={handleApprove}
-                      className="flex-1 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center justify-center gap-1.5"
-                    >
-                      <Icon name="check" className="text-[16px]" />
-                      Approve
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleReject}
+                        disabled={isWorking}
+                        title="Send back for another pass before approving"
+                        className="px-3 py-2.5 rounded-xl bg-surface-container text-error font-label-md text-label-md font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Icon name="close" className="text-[16px]" />
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApprove}
+                        disabled={isWorking}
+                        className="flex-1 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Icon name="check" className="text-[16px]" />
+                        Approve
+                      </button>
+                    </>
                   )}
                   <button
                     type="button"
-                    disabled={item.status !== 'approved'}
+                    disabled={item.status !== 'approved' || isWorking}
                     onClick={handleSaveToIntelligence}
                     className="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
                   >
@@ -355,6 +491,9 @@ export function ScriptGenerationPage() {
                     Save to Content Intelligence
                   </button>
                 </div>
+                {item.stage === 'review' && item.rejectionReason && (
+                  <p className="font-label-sm text-label-sm text-error">Rejected: {item.rejectionReason}</p>
+                )}
               </>
             )}
           </div>
