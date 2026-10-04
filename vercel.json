@@ -5,5 +5,8 @@
       "includeFiles": "backend/node_modules/.prisma/client/**",
       "maxDuration": 30
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }
