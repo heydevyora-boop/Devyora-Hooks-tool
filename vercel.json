@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build && cd backend && npm install && npm run prisma:generate && npm run build",
+  "buildCommand": "npm run build && cd backend && npm install && npm run prisma:generate && npm run prisma:migrate:deploy && npm run build",
   "functions": {
     "api/**/*.ts": {
       "includeFiles": "backend/node_modules/.prisma/client/**",

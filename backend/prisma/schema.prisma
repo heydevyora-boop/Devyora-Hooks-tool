@@ -17,8 +17,13 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations need a session-mode (non-transaction-pooled) connection —
+  // the pooled DATABASE_URL (port 6543) doesn't support the advisory locks
+  // `prisma migrate deploy` uses. Falls back to DATABASE_URL locally where
+  // DIRECT_URL isn't set.
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------
